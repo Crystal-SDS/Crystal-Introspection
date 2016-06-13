@@ -41,10 +41,6 @@ class AbstractMetric(object):
             # TODO: Check for object-server
             return True
         
-    def _is_storlet_executed(self):
-        # TODO: Check if Storlet was executed
-        return False
-
     def _is_get_already_intercepted(self):
         return isinstance(self.response.app_iter,IterLikeFileDescriptor) or \
                isinstance(self.response.app_iter,IterLikeGetProxy)
@@ -71,15 +67,17 @@ class AbstractMetric(object):
     def _get_object_reader(self):
 
         if self.method == 'GET':
-            if self.current_server == 'proxy':
-                reader = self.response.app_iter
-            if self.current_server == 'object':
-                reader = self.response.app_iter._fp
             if self._is_get_already_intercepted():
                 reader = self.response.app_iter.obj_data
-                self.response.app_iter.obj_data = None
-   
-        if self.method == "PUT" and not self._is_put_already_intercepted():
+                self.response.app_iter.closed = True
+                
+            elif self.current_server == 'proxy':
+                reader = self.response.app_iter
+                    
+            elif self.current_server == 'object':
+                reader = self.response.app_iter._fp
+
+        elif self.method == "PUT" and not self._is_put_already_intercepted():
             reader = self.request.environ['wsgi.input']
         elif self.method == "PUT":
             reader = self.request.environ['wsgi.input'].obj_data
@@ -286,25 +284,19 @@ class IterLikeGetProxy(IterLike):
         self._apply_metrics_on_finish()
         self.closed = True
         try:
+            print "---> Closing Metric Pipe <---"
             self.obj_data.close()
         except:
             pass
-
         
 class IterLikeFileDescriptor(IterLike):
-    def __init__(self, obj_data, metric, timeout):        
+    def __init__(self, obj_data, metric, timeout):
         super(IterLikeFileDescriptor, self).__init__(obj_data, metric, timeout)
-
-        self.epoll = select.epoll()
-        self.epoll.register(self.obj_data, select.EPOLLIN | select.EPOLLPRI)
-
-    def __iter__(self):
-        return self
 
     def read_with_timeout(self, size):
         try:
             with Timeout(self.timeout):
-                chunk = os.read(self.obj_data, size) 
+                chunk = os.read(self.obj_data, size)
                 self._apply_metrics_on_read(chunk)
         except Timeout:
             self.close()
@@ -314,15 +306,16 @@ class IterLikeFileDescriptor(IterLike):
             raise
         return chunk
 
-    def next(self, size=CHUNK_SIZE):
+    def next(self, size=64 * 1024):
         if len(self.buf) < size:
-            r = self.epoll.poll(self.timeout)
-
+            r, _, _ = select.select([self.obj_data], [], [], self.timeout)
             if len(r) == 0:
                 self.close()
-            elif self.obj_data in r[0]:
+
+            if self.obj_data in r:
                 self.buf += self.read_with_timeout(size - len(self.buf))
                 if self.buf == b'':
+                    self.close()
                     raise StopIteration('Stopped iterator ex')
             else:
                 raise StopIteration('Stopped iterator ex')
@@ -338,9 +331,6 @@ class IterLikeFileDescriptor(IterLike):
     def close(self):
         if self.closed:
             return
-        self._apply_metrics_on_finish()
         self.closed = True
-        self.epoll.unregister(self.obj_data)
-        self.epoll.close()
         os.close(self.obj_data)
         

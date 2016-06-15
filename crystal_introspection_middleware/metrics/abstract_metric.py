@@ -202,10 +202,15 @@ class IterLike(object):
         return lines
 
     def close(self):
-        raise NotImplementedError()
+        if self.closed:
+            return
+        self._apply_metrics_on_finish()
+        self.obj_data.close()
+        self.closed = True
 
     def __del__(self):
         self.close()
+
 
 class IterLikePut(IterLike):
 
@@ -237,16 +242,6 @@ class IterLikePut(IterLike):
             data = self.buf
             self.buf = b''
         return data
-
-    def close(self):
-        if self.closed:
-            return
-        self._apply_metrics_on_finish()
-        self.closed = True
-        try:
-            self.obj_data.close()
-        except:
-            pass
         
         
 class IterLikeGetProxy(IterLike):
@@ -278,20 +273,8 @@ class IterLikeGetProxy(IterLike):
             self.buf = b''
         return data
 
-    def close(self):
-        if self.closed:
-            return
-        self._apply_metrics_on_finish()
-        self.closed = True
-        try:
-            print "---> Closing Metric Pipe <---"
-            self.obj_data.close()
-        except:
-            pass
-        
+
 class IterLikeFileDescriptor(IterLike):
-    def __init__(self, obj_data, metric, timeout):
-        super(IterLikeFileDescriptor, self).__init__(obj_data, metric, timeout)
 
     def read_with_timeout(self, size):
         try:
@@ -331,6 +314,6 @@ class IterLikeFileDescriptor(IterLike):
     def close(self):
         if self.closed:
             return
-        self.closed = True
         os.close(self.obj_data)
+        self.closed = True
         

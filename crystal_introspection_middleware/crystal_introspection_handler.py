@@ -26,7 +26,7 @@ class CrystalIntrospectionHandler():
             try:
                 self.logger.info("Crystal - Starting introspection threads.")
                 self.crystal_control.publish_thread.start()
-                self.crystal_control.control_thread.start()
+                #self.crystal_control.control_thread.start()
                 self.crystal_control.threads_started = True
                 time.sleep(0.1)
             except:
@@ -79,8 +79,8 @@ class CrystalIntrospectionHandlerMiddleware(object):
         self.control_class = CrystalIntrospectionControl
         
         ''' Singleton instance of Introspection control '''
-        self.crystal_control =  self.control_class.Instance(conf = self.conf,
-                                                            log = self.logger)
+        self.crystal_control =  self.control_class(conf = self.conf,
+                                                   log = self.logger)
         
     @wsgify
     def __call__(self, req):

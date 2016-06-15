@@ -1,64 +1,32 @@
 from threading import Thread
+import socket
 import time
 import pika
 import redis
 import json
-
-class Singleton:
-    """
-    A non-thread-safe helper class to ease implementing singletons.
-    This should be used as a decorator -- not a metaclass -- to the
-    class that should be a singleton.
-
-    The decorated class can define one `__init__` function that
-    takes only the `self` argument. Other than that, there are
-    no restrictions that apply to the decorated class.
-
-    To get the singleton instance, use the `Instance` method. Trying
-    to use `__call__` will result in a `TypeError` being raised.
-
-    Limitations: The decorated class cannot be inherited from.
-    """
-
-    def __init__(self, decorated):
-        self._decorated = decorated
-
-    def Instance(self, **args):
-        """
-        Returns the singleton instance. Upon its first call, it creates a
-        new instance of the decorated class and calls its `__init__` method.
-        On all subsequent calls, the already created instance is returned.
-
-        """
-        logger = args['log']
-        try:
-            if self._instance:
-                logger.info("Crystal - Singleton instance of introspection"
-                            " control already created")
-                return self._instance
-        except AttributeError:
-            logger.info("Crystal - Creating singleton instance of"
-                        " introspection control")
-            self._instance = self._decorated(**args)
-            return self._instance
-
-    def __call__(self):
-        raise TypeError('Singletons must be accessed through `Instance()`.')
-
-    def __instancecheck__(self, inst):
-        return isinstance(inst, self._decorated)
+import os
 
 
-@Singleton
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):  # @NoSelf
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
 class CrystalIntrospectionControl():
+    __metaclass__ = Singleton
+    
     def __init__(self, conf, log):
         self.logger = log
         self.conf = conf
         
-        self.control_thread = ControlThread(self.conf)
+        self.control_thread = ControlThread(self.conf, self.logger)
         self.control_thread.daemon = True
+        self.control_thread.start()
         
-        self.publish_thread = PublishThread(self.conf)
+        self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
         
         self.threads_started = False
@@ -74,9 +42,10 @@ class CrystalIntrospectionControl():
         
 class PublishThread(Thread):
     
-    def __init__(self, conf):
+    def __init__(self, conf, logger):
         Thread.__init__(self)
         
+        self.logger = logger
         self.monitoring_statefull_data = dict()
         self.monitoring_stateless_data = dict()
         
@@ -140,21 +109,41 @@ class PublishThread(Thread):
      
 class ControlThread(Thread):
     
-    def __init__(self, conf):
+    def __init__(self, conf, logger):
         Thread.__init__(self)
-
-        self.interval = conf.get('control_interval',10)
-        redis_host = conf.get('redis_host')
-        redis_port = conf.get('redis_port')
-        redis_db = conf.get('redis_db')
         
-        self.redis = redis.StrictRedis(redis_host, 
-                                       redis_port, 
+        self.conf = conf
+        self.logger = logger
+        self.server = self.conf.get('execution_server')
+        self.interval = self.conf.get('control_interval',10)
+        redis_host = self.conf.get('redis_host')
+        redis_port = self.conf.get('redis_port')
+        redis_db = self.conf.get('redis_db')
+        
+        self.host_name = socket.gethostname()
+        self.host_ip = socket.gethostbyname(self.host_name)   
+        
+        
+        self.redis = redis.StrictRedis(redis_host,
+                                       redis_port,
                                        redis_db)
         
         self.metric_list = {}
+        
+        
+    def _get_swift_disk_usage(self):
+        swift_devices = dict()
+        for disk in os.listdir('/srv/node/'):
+            statvfs = os.statvfs('/dev/'+disk)
+            swift_devices[disk] = dict()
+            swift_devices[disk]['size'] = statvfs.f_frsize * statvfs.f_blocks
+            swift_devices[disk]['free'] = statvfs.f_frsize * statvfs.f_bfree
       
+        return swift_devices
+    
     def run(self):
-        while True:
+        while True: 
+            swift_usage = self._get_swift_disk_usage()
             self.metric_list = self.redis.hgetall("metrics")
+            self.redis.hmset('node:'+self.host_name,{'type':self.server,'name':self.host_name,'ip':self.host_ip, 'last_ping':time.time(), 'devices':json.dumps(swift_usage)})
             time.sleep(self.interval)

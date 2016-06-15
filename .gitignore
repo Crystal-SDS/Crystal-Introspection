@@ -60,5 +60,10 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
 /deploy_middleware.py
 /copy_middleware.sh
+/.project
+/.pydevproject
+/deploy_introspection.py
+/.gitignore

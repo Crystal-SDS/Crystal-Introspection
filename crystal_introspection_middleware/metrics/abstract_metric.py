@@ -81,7 +81,6 @@ class AbstractMetric(object):
             reader = self.request.environ['wsgi.input']
         elif self.method == "PUT":
             reader = self.request.environ['wsgi.input'].obj_data
-            self.request.environ['wsgi.input'].obj_data = None
 
         return reader
     
@@ -242,6 +241,9 @@ class IterLikePut(IterLike):
             data = self.buf
             self.buf = b''
         return data
+    
+    def close(self):
+        pass
         
         
 class IterLikeGetProxy(IterLike):

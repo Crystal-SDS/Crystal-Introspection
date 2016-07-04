@@ -6,7 +6,9 @@ from swift.common.utils import get_logger
 import time
 import json
 
+
 PACKAGE_NAME = __name__.split('.')[0]
+
 
 class CrystalIntrospectionHandler():
 
@@ -22,15 +24,14 @@ class CrystalIntrospectionHandler():
         self._start_control_threads()
         
     def _start_control_threads(self):
-        if not self.crystal_control.threads_started:
+        if not self.crystal_control.publish_thread_started:
             try:
-                self.logger.info("Crystal - Starting introspection threads.")
+                self.logger.info("Crystal - Starting publish thread.")
                 self.crystal_control.publish_thread.start()
-                #self.crystal_control.control_thread.start()
-                self.crystal_control.threads_started = True
+                self.crystal_control.publish_thread_started = True
                 time.sleep(0.1)
             except:
-                self.logger.info("Crystal - Error starting introspection threads.")
+                self.logger.info("Crystal - Error starting publish thread.")
             
     def _import_metric(self,metric):
         (modulename, classname) = metric.rsplit('.', 1)
@@ -68,6 +69,7 @@ class CrystalIntrospectionHandler():
             return self.response
         
         return self.request.get_response(self.app)
+
 
 class CrystalIntrospectionHandlerMiddleware(object):
 

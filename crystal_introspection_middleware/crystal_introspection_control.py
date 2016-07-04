@@ -29,7 +29,7 @@ class CrystalIntrospectionControl():
         self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
         
-        self.threads_started = False
+        self.publish_thread_started = False
 
     def get_metrics(self):
         return self.control_thread.metric_list 
@@ -39,7 +39,8 @@ class CrystalIntrospectionControl():
     
     def publish_stateless_metric(self,routing_key, key, value):
         self.publish_thread.publish_stateless(routing_key, key, value)
-        
+
+
 class PublishThread(Thread):
     
     def __init__(self, conf, logger):
@@ -64,11 +65,12 @@ class PublishThread(Thread):
                                                     credentials = credentials)
       
     def publish_statefull(self, routing_key, key, value):
+        
         if not routing_key in self.monitoring_statefull_data:
-            self.monitoring_statefull_data[routing_key] = dict()
+            self.monitoring_statefull_data[routing_key] = dict()         
             if not key in self.monitoring_statefull_data[routing_key]:
                 self.monitoring_statefull_data[routing_key][key] = 0
-                
+
         self.monitoring_statefull_data[routing_key][key] += value
             
     def publish_stateless(self, routing_key, key, value):
@@ -105,7 +107,7 @@ class PublishThread(Thread):
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
                                       body=json.dumps(data))
-                
+
      
 class ControlThread(Thread):
     
@@ -129,7 +131,6 @@ class ControlThread(Thread):
                                        redis_db)
         
         self.metric_list = {}
-        
         
     def _get_swift_disk_usage(self):
         swift_devices = dict()

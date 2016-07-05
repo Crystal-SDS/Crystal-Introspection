@@ -243,7 +243,8 @@ class IterLikePut(IterLike):
         return data
     
     def close(self):
-        pass
+        self._apply_metrics_on_finish()
+        self.closed = True
         
         
 class IterLikeGetProxy(IterLike):

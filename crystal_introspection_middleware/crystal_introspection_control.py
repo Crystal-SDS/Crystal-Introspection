@@ -6,6 +6,8 @@ import redis
 import json
 import os
 
+SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
+DST_METRIC_PATH = os.path.abspath(__file__).rsplit('/',1)[0]+'/metrics'
 
 class Singleton(type):
     _instances = {}
@@ -124,7 +126,7 @@ class ControlThread(Thread):
         
         self.host_name = socket.gethostname()
         self.host_ip = socket.gethostbyname(self.host_name)   
-        
+        self.devices = self.conf.get('devices')
         
         self.redis = redis.StrictRedis(redis_host,
                                        redis_port,
@@ -134,17 +136,32 @@ class ControlThread(Thread):
         
     def _get_swift_disk_usage(self):
         swift_devices = dict()
-        for disk in os.listdir('/srv/node/'):
-            statvfs = os.statvfs('/dev/'+disk)
-            swift_devices[disk] = dict()
-            swift_devices[disk]['size'] = statvfs.f_frsize * statvfs.f_blocks
-            swift_devices[disk]['free'] = statvfs.f_frsize * statvfs.f_bfree
+        if self.devices and os.path.exists(self.devices):
+            for disk in os.listdir(self.devices):
+                statvfs = os.statvfs(self.devices+'/'+disk)
+                swift_devices[disk] = dict()
+                swift_devices[disk]['size'] = statvfs.f_frsize * statvfs.f_blocks
+                swift_devices[disk]['free'] = statvfs.f_frsize * statvfs.f_bfree
       
         return swift_devices
     
+    def _get_workload_metrics(self):
+        metric_keys = self.redis.keys("workload_metric:*") 
+        metric_list = dict()
+        for key in metric_keys:
+            metric_list[key] = self.redis.hgetall(key)
+            file_name = metric_list[key]['metric_name']
+            try:
+                os.symlink(SRC_METRIC_PATH+'/'+file_name, DST_METRIC_PATH+'/'+file_name)
+            except:
+                pass
+
+        return metric_list
+
     def run(self):
-        while True: 
+        while True:
             swift_usage = self._get_swift_disk_usage()
-            self.metric_list = self.redis.hgetall("metrics")
+            self.metric_list = self._get_workload_metrics()           
+
             self.redis.hmset('node:'+self.host_name,{'type':self.server,'name':self.host_name,'ip':self.host_ip, 'last_ping':time.time(), 'devices':json.dumps(swift_usage)})
             time.sleep(self.interval)

@@ -6,8 +6,10 @@ import redis
 import json
 import os
 
+
 SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
 DST_METRIC_PATH = os.path.abspath(__file__).rsplit('/',1)[0]+'/metrics'
+
 
 class Singleton(type):
     _instances = {}
@@ -24,9 +26,12 @@ class CrystalIntrospectionControl():
         self.logger = log
         self.conf = conf
         
+        self.status_thread = StatusThread(self.conf, self.logger)
+        self.status_thread.daemon = True
+        self.status_thread.start()
+        
         self.control_thread = ControlThread(self.conf, self.logger)
         self.control_thread.daemon = True
-        self.control_thread.start()
         
         self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
@@ -110,7 +115,7 @@ class PublishThread(Thread):
                                       routing_key=routing_key, 
                                       body=json.dumps(data))
 
-     
+
 class ControlThread(Thread):
     
     def __init__(self, conf, logger):
@@ -120,6 +125,46 @@ class ControlThread(Thread):
         self.logger = logger
         self.server = self.conf.get('execution_server')
         self.interval = self.conf.get('control_interval',10)
+        redis_host = self.conf.get('redis_host')
+        redis_port = self.conf.get('redis_port')
+        redis_db = self.conf.get('redis_db')
+        
+        self.redis = redis.StrictRedis(redis_host,
+                                       redis_port,
+                                       redis_db)
+        
+        self.metric_list = {}
+    
+    def _get_workload_metrics(self):
+        metric_keys = self.redis.keys("workload_metric:*") 
+        metric_list = dict()
+        for key in metric_keys:
+            metric = self.redis.hgetall(key)
+            if metric['execution_server'] == self.server:
+                metric_list[key] = metric
+                file_name = metric_list[key]['metric_name']
+                try:
+                    os.symlink(SRC_METRIC_PATH+'/'+file_name, DST_METRIC_PATH+'/'+file_name)
+                except:
+                    pass
+
+        return metric_list
+
+    def run(self):
+        while True:
+            self.metric_list = self._get_workload_metrics()
+            time.sleep(self.interval)
+
+
+class StatusThread(Thread):
+    
+    def __init__(self, conf, logger):
+        Thread.__init__(self)
+        
+        self.conf = conf
+        self.logger = logger
+        self.server = self.conf.get('execution_server')
+        self.interval = self.conf.get('status_interval',10)
         redis_host = self.conf.get('redis_host')
         redis_port = self.conf.get('redis_port')
         redis_db = self.conf.get('redis_db')
@@ -145,23 +190,12 @@ class ControlThread(Thread):
       
         return swift_devices
     
-    def _get_workload_metrics(self):
-        metric_keys = self.redis.keys("workload_metric:*") 
-        metric_list = dict()
-        for key in metric_keys:
-            metric_list[key] = self.redis.hgetall(key)
-            file_name = metric_list[key]['metric_name']
-            try:
-                os.symlink(SRC_METRIC_PATH+'/'+file_name, DST_METRIC_PATH+'/'+file_name)
-            except:
-                pass
-
-        return metric_list
-
     def run(self):
         while True:
             swift_usage = self._get_swift_disk_usage()
-            self.metric_list = self._get_workload_metrics()           
-
-            self.redis.hmset('node:'+self.host_name,{'type':self.server,'name':self.host_name,'ip':self.host_ip, 'last_ping':time.time(), 'devices':json.dumps(swift_usage)})
+            self.redis.hmset('node:'+self.host_name, {'type':self.server,
+                                                      'name':self.host_name,
+                                                      'ip':self.host_ip,
+                                                      'last_ping':time.time(),
+                                                      'devices':json.dumps(swift_usage)})
             time.sleep(self.interval)

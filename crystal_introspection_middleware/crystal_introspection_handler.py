@@ -25,12 +25,13 @@ class CrystalIntrospectionHandler():
     def _start_control_threads(self):
         if not self.crystal_control.publish_thread_started:
             try:
-                self.logger.info("Crystal Introspection- Starting publish thread.")
+                self.logger.info("Crystal Introspection - Starting threads.")
                 self.crystal_control.publish_thread.start()
+                self.crystal_control.control_thread.start()
                 self.crystal_control.publish_thread_started = True
                 time.sleep(0.1)
             except:
-                self.logger.info("Crystal Introspection- Error starting publish thread.")
+                self.logger.info("Crystal Introspection - Error starting threads.")
             
     def _import_metric(self,metric):
         modulename = 'metrics.'+metric['metric_name'].rsplit('.', 1)[0]
@@ -49,7 +50,7 @@ class CrystalIntrospectionHandler():
         
         if self._is_valid_request():
             metrics = self.crystal_control.get_metrics()
-    
+            
             for metric_key in metrics:
                 metric = metrics[metric_key]
                 if metric['in_flow'] == 'True':
@@ -63,7 +64,7 @@ class CrystalIntrospectionHandler():
             for metric_key in metrics:
                 metric = metrics[metric_key]
                 if metric['out_flow'] == 'True':
-                    self.logger.info('Crystal Introspection -  Go to execute '
+                    self.logger.info('Crystal Introspection - Go to execute '
                                      'metric on output flow: '+metric['metric_name'])
                     metric_class = self._import_metric(metric)            
                     self.response = metric_class.execute()

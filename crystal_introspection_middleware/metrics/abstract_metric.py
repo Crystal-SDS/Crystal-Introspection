@@ -131,7 +131,7 @@ class IterLike(object):
         self.timeout = timeout
         self.metrics = metrics
         self.buf = b''
-        
+         
     def __iter__(self):
         return self
 

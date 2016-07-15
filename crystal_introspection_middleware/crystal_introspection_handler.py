@@ -61,6 +61,8 @@ class CrystalIntrospectionHandler():
     
             self.response = self.request.get_response(self.app)
             
+            # TODO(josep): check status 200 on response
+            
             for metric_key in metrics:
                 metric = metrics[metric_key]
                 if metric['out_flow'] == 'True':

@@ -53,7 +53,7 @@ class CrystalIntrospectionHandler():
             
             for metric_key in metrics:
                 metric = metrics[metric_key]
-                if metric['in_flow'] == 'True':
+                if metric['in_flow'] == 'True' and metric['enabled'] == 'True':
                     self.logger.info('Crystal Introspection - Go to execute '
                                      'metric on input flow: '+metric['metric_name'])
                     metric_class = self._import_metric(metric)            
@@ -65,7 +65,7 @@ class CrystalIntrospectionHandler():
             
             for metric_key in metrics:
                 metric = metrics[metric_key]
-                if metric['out_flow'] == 'True':
+                if metric['out_flow'] == 'True' and metric['enabled'] == 'True':
                     self.logger.info('Crystal Introspection - Go to execute '
                                      'metric on output flow: '+metric['metric_name'])
                     metric_class = self._import_metric(metric)            

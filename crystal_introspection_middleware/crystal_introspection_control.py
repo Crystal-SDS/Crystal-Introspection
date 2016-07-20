@@ -72,20 +72,21 @@ class PublishThread(Thread):
                                                     credentials = credentials)
       
     def publish_statefull(self, routing_key, key, value):
-        
         if not routing_key in self.monitoring_statefull_data:
             self.monitoring_statefull_data[routing_key] = dict()         
-            if not key in self.monitoring_statefull_data[routing_key]:
-                self.monitoring_statefull_data[routing_key][key] = 0
+            
+        if not key in self.monitoring_statefull_data[routing_key]:
+            self.monitoring_statefull_data[routing_key][key] = 0
 
         self.monitoring_statefull_data[routing_key][key] += value
             
     def publish_stateless(self, routing_key, key, value):
         if not routing_key in self.monitoring_stateless_data:
             self.monitoring_stateless_data[routing_key] = dict()
-            if not key in self.monitoring_stateless_data[routing_key]:
-                self.monitoring_stateless_data[routing_key][key] = 0
                 
+        if not key in self.monitoring_stateless_data[routing_key]:
+            self.monitoring_stateless_data[routing_key][key] = 0
+                  
         self.monitoring_stateless_data[routing_key][key] += value
        
     def run(self):

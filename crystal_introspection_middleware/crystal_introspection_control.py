@@ -184,10 +184,11 @@ class StatusThread(Thread):
         swift_devices = dict()
         if self.devices and os.path.exists(self.devices):
             for disk in os.listdir(self.devices):
-                statvfs = os.statvfs(self.devices+'/'+disk)
-                swift_devices[disk] = dict()
-                swift_devices[disk]['size'] = statvfs.f_frsize * statvfs.f_blocks
-                swift_devices[disk]['free'] = statvfs.f_frsize * statvfs.f_bfree
+                if disk.startswith('sd'):
+                    statvfs = os.statvfs(self.devices+'/'+disk)
+                    swift_devices[disk] = dict()
+                    swift_devices[disk]['size'] = statvfs.f_frsize * statvfs.f_blocks
+                    swift_devices[disk]['free'] = statvfs.f_frsize * statvfs.f_bfree
       
         return swift_devices
     

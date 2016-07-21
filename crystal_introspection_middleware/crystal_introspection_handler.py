@@ -119,14 +119,14 @@ def filter_factory(global_conf, **local_conf):
     crystal_conf['execution_server'] = conf.get('execution_server', 'object')
     
     crystal_conf['rabbit_host'] = conf.get('rabbit_host', 'controller')
-    crystal_conf['rabbit_port'] = conf.get('rabbit_port', 5672)
+    crystal_conf['rabbit_port'] = int(conf.get('rabbit_port', 5672))
     crystal_conf['rabbit_username'] = conf.get('rabbit_username', 'openstack')
     crystal_conf['rabbit_password'] = conf.get('rabbit_password', 
                                                'rabbitmqastl1a4b4')
 
     crystal_conf['redis_host'] = conf.get('redis_host', 'controller')
-    crystal_conf['redis_port'] = conf.get('redis_port', 6379)
-    crystal_conf['redis_db'] = conf.get('redis_db', 0)
+    crystal_conf['redis_port'] = int(conf.get('redis_port', 6379))
+    crystal_conf['redis_db'] = int(conf.get('redis_db', 0))
     
     crystal_conf['bind_ip'] = conf.get('bind_ip')
     crystal_conf['bind_port'] = conf.get('bind_port')

@@ -243,6 +243,8 @@ class IterLikePut(IterLike):
         return data
     
     def close(self):
+        if self.closed:
+            return
         self._apply_metrics_on_finish()
         self.closed = True
         

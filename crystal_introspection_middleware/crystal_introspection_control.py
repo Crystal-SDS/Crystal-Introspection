@@ -1,11 +1,13 @@
 from threading import Thread
-import datetime
+from datetime import datetime
 import socket
 import time
+import pytz
 import pika
 import redis
 import json
 import os
+
 
 
 SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
@@ -27,7 +29,7 @@ class CrystalIntrospectionControl():
         self.logger = log
         self.conf = conf
         
-        self.status_thread = StatusThread(self.conf, self.logger)
+        self.status_thread = NodeStatusThread(self.conf, self.logger)
         self.status_thread.daemon = True
         self.status_thread.start()
         
@@ -89,12 +91,12 @@ class PublishThread(Thread):
             self.monitoring_stateless_data[routing_key][key] = 0
                   
         self.monitoring_stateless_data[routing_key][key] += value
-       
+
     def run(self):
         data = dict()
         while True:
             time.sleep(self.interval)
-            #date = datetime.datetime.now()
+            date = datetime.now(pytz.timezone(time.tzname[0]))
             rabbit = pika.BlockingConnection(self.parameters)
             channel = rabbit.channel()
 
@@ -107,7 +109,7 @@ class PublishThread(Thread):
                     else:
                         self.monitoring_stateless_data[routing_key][key] = 0
                        
-                #data['@timestamp'] = str(date.isoformat())
+                data[self.ip]['@timestamp'] = str(date.isoformat())
 
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
@@ -115,7 +117,7 @@ class PublishThread(Thread):
                 
             for routing_key in self.monitoring_statefull_data.keys():
                 data[self.ip] = self.monitoring_statefull_data[routing_key].copy()
-                #data['@timestamp'] = str(date.isoformat())
+                data[self.ip]['@timestamp'] = str(date.isoformat())
                 
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
@@ -142,6 +144,10 @@ class ControlThread(Thread):
         self.metric_list = {}
     
     def _get_workload_metrics(self):
+        """
+        This method connects to redis to download new metrics the information
+        introduced via the dashboard.
+        """
         metric_keys = self.redis.keys("workload_metric:*") 
         metric_list = dict()
         for key in metric_keys:
@@ -150,7 +156,9 @@ class ControlThread(Thread):
                 metric_list[key] = metric
                 file_name = metric_list[key]['metric_name']
                 try:
-                    os.symlink(SRC_METRIC_PATH+'/'+file_name, DST_METRIC_PATH+'/'+file_name)
+                    src = os.path.join(SRC_METRIC_PATH, file_name)
+                    lnk = os.path.join(DST_METRIC_PATH, file_name)
+                    os.symlink(src, lnk)
                 except:
                     pass
 
@@ -162,7 +170,7 @@ class ControlThread(Thread):
             time.sleep(self.interval)
 
 
-class StatusThread(Thread):
+class NodeStatusThread(Thread):
     
     def __init__(self, conf, logger):
         Thread.__init__(self)

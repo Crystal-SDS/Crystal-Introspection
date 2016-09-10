@@ -22,7 +22,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class CrystalIntrospectionControl():
+class CrystalIntrospectionControl(object):
     __metaclass__ = Singleton
     
     def __init__(self, conf, log):
@@ -39,7 +39,7 @@ class CrystalIntrospectionControl():
         self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
         
-        self.publish_thread_started = False
+        self.threads_started = False
 
     def get_metrics(self):
         return self.control_thread.metric_list 
@@ -152,7 +152,8 @@ class ControlThread(Thread):
         metric_list = dict()
         for key in metric_keys:
             metric = self.redis.hgetall(key)
-            if metric['execution_server'] == self.server:
+            if metric['execution_server'] == self.server and \
+               metric['enabled'] == 'True':
                 metric_list[key] = metric
                 file_name = metric_list[key]['metric_name']
                 try:

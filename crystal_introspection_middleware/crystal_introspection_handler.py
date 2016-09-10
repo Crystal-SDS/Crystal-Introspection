@@ -8,8 +8,33 @@ import time
 
 PACKAGE_NAME = __name__.split('.')[0]
 
+class NotCrystalRequest(Exception):
+    pass
 
-class CrystalIntrospectionHandler():
+def _request_instance_property():
+    """
+    Set and retrieve the request instance.
+    This works to force to tie the consistency between the request path and
+    self.vars (i.e. api_version, account, container, obj) even if unexpectedly
+    (separately) assigned.
+    """
+
+    def getter(self):
+        return self._request
+
+    def setter(self, request):
+        self._request = request
+        try:
+            self._extract_vaco()
+        except ValueError:
+            raise NotCrystalRequest()
+
+    return property(getter, setter,
+                    doc="Force to tie the request to acc/con/obj vars")
+
+class CrystalIntrospectionHandler(object):
+
+    request = _request_instance_property()
 
     def __init__(self, request, conf, app, logger, crystal_control):
         self.exec_server = conf.get('execution_server')
@@ -22,13 +47,29 @@ class CrystalIntrospectionHandler():
         self.crystal_control = crystal_control
         self._start_control_threads()
         
+    def _extract_vaco(self):
+        """
+        Set version, account, container, obj vars from self._parse_vaco result
+        :raises ValueError: if self._parse_vaco raises ValueError while
+                            parsing, this method doesn't care and raise it to
+                            upper caller.
+        """
+        if self.exec_server == 'proxy':
+            self._api_version, self._account, self._container, self._obj = \
+                self.request.split_path(4, 4, rest_with_last=True)
+        elif self.exec_server == 'object':
+            _, _, self._account, self._container, self._obj = \
+                self.request.split_path(5, 5, rest_with_last=True)
+        else:
+            raise NotCrystalRequest()
+        
     def _start_control_threads(self):
-        if not self.crystal_control.publish_thread_started:
+        if not self.crystal_control.threads_started:
             try:
                 self.logger.info("Crystal Introspection - Starting threads.")
                 self.crystal_control.publish_thread.start()
                 self.crystal_control.control_thread.start()
-                self.crystal_control.publish_thread_started = True
+                self.crystal_control.threads_started = True
                 time.sleep(0.1)
             except:
                 self.logger.info("Crystal Introspection - Error starting threads.")
@@ -42,18 +83,18 @@ class CrystalIntrospectionHandler():
                                self.exec_server, self.request, self.response)
         return metric_class
     
+    @property
     def _is_valid_request(self):
-        #return False
         return self.method == 'GET' or self.method == 'PUT'
 
     def handle_request(self):
         
-        if self._is_valid_request():
+        if self._is_valid_request:
             metrics = self.crystal_control.get_metrics()
             
             for metric_key in metrics:
                 metric = metrics[metric_key]
-                if metric['in_flow'] == 'True' and metric['enabled'] == 'True':
+                if metric['in_flow'] == 'True':
                     self.logger.info('Crystal Introspection - Go to execute '
                                      'metric on input flow: '+metric['metric_name'])
                     metric_class = self._import_metric(metric)            
@@ -61,15 +102,14 @@ class CrystalIntrospectionHandler():
     
             self.response = self.request.get_response(self.app)
             
-            # TODO(josep): check status 200 on response
-            
-            for metric_key in metrics:
-                metric = metrics[metric_key]
-                if metric['out_flow'] == 'True' and metric['enabled'] == 'True':
-                    self.logger.info('Crystal Introspection - Go to execute '
-                                     'metric on output flow: '+metric['metric_name'])
-                    metric_class = self._import_metric(metric)            
-                    self.response = metric_class.execute()
+            if self.response.is_success:            
+                for metric_key in metrics:
+                    metric = metrics[metric_key]
+                    if metric['out_flow'] == 'True':
+                        self.logger.info('Crystal Introspection - Go to execute '
+                                         'metric on output flow: '+metric['metric_name'])
+                        metric_class = self._import_metric(metric)            
+                        self.response = metric_class.execute()
             
             return self.response
         
@@ -80,6 +120,7 @@ class CrystalIntrospectionHandlerMiddleware(object):
 
     def __init__(self, app, conf, crystal_conf):
         self.app = app
+        self.exec_server = conf.get('execution_server')
         self.logger = get_logger(conf, log_route='crystal_introspection_handler')
         self.conf = crystal_conf
         self.handler_class = CrystalIntrospectionHandler
@@ -92,12 +133,14 @@ class CrystalIntrospectionHandlerMiddleware(object):
     @wsgify
     def __call__(self, req):
         try:
+            if self.exec_server == 'object':
+                raise NotCrystalRequest
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
             self.logger.debug('crystal_introspection_handler call')
-        except:
-            return req.get_response(self.app)
+        except NotCrystalRequest:
+            return req.get_response(self.app)            
 
         try:
             return request_handler.handle_request()

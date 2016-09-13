@@ -20,6 +20,8 @@ class PutRequestPerformance(AbstractMetric):
         if self.method == "PUT" and self._is_object_request():
             self._intercept_put()
             self.start_time = time.time()
+            
+        return self.request
 
     def on_read(self, chunk):
         self.request_size += len(chunk)

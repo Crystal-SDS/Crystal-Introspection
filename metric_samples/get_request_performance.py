@@ -20,6 +20,8 @@ class GetRequestPerformance(AbstractMetric):
         if self.method == "GET" and self._is_object_request():
             self._intercept_get()
             self.start_time = time.time()
+            
+        return self.response
 
     def on_read(self, chunk):
         self.request_size += len(chunk)

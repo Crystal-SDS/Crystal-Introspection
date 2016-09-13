@@ -15,7 +15,7 @@ class GetRequestPerformance(AbstractMetric):
         self.init_time = 0
         self.request_size = 0
     
-    def execute(self, request):
+    def execute(self):
         
         if self.method == "GET" and self._is_object_request():
             self._intercept_get()
@@ -29,3 +29,4 @@ class GetRequestPerformance(AbstractMetric):
     def on_finish(self):        
         transfer_perf = self.request_size/(time.time()-self.init_time)
         self.register_metric(self.account, transfer_perf)
+        

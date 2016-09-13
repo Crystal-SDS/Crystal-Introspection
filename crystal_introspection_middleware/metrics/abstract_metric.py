@@ -113,7 +113,7 @@ class AbstractMetric(object):
             else:
                 _, _, self.account, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
     
-    def execute(self, request):
+    def execute(self):
         """ Execute Metric """
         raise NotImplementedError()
     

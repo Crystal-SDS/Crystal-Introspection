@@ -12,7 +12,7 @@ class PutRequestPerformance(AbstractMetric):
     def __init__(self, logger, crystal_control, metric_name, server, request, response):
         AbstractMetric.__init__(self, logger, crystal_control, metric_name, server, request, response)
         '''Store the current requests times and sizes'''
-        self.init_time = 0
+        self.start_time = 0
         self.request_size = 0
     
     def execute(self):
@@ -27,6 +27,6 @@ class PutRequestPerformance(AbstractMetric):
         self.request_size += len(chunk)
 
     def on_finish(self):        
-        transfer_perf = self.request_size/(time.time()-self.init_time)
+        transfer_perf = self.request_size/(time.time()-self.start_time)
         self.register_metric(self.account, transfer_perf)
         

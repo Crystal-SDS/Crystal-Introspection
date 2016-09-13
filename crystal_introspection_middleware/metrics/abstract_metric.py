@@ -15,6 +15,7 @@ class AbstractMetric(object):
         self.current_server = server
         self.method = self.request.method
         self.state = 'stateless'
+        self.account_name = self.request.headers['X-Project-Name']
         self._parse_vaco()
         
     def register_metric(self, key, value):
@@ -23,7 +24,7 @@ class AbstractMetric(object):
         """
         routing_key = self.metric_name
         if self.state == "stateful":
-            self.crystal_control.publish_stateful_metric(routing_key, 
+            self.crystal_control.publish_stateful_metric(routing_key,
                                                          key, value)
         else: 
             self.crystal_control.publish_stateless_metric(routing_key, 

@@ -27,6 +27,6 @@ class PutRequestPerformance(AbstractMetric):
         self.request_size += len(chunk)
 
     def on_finish(self):        
-        transfer_perf = self.request_size/(time.time()-self.start_time)
+        transfer_perf = ((self.request_size/(time.time()-self.start_time))/1024.0)/1024
         self.register_metric(self.account, transfer_perf)
         

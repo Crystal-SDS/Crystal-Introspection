@@ -15,7 +15,7 @@ class AbstractMetric(object):
         self.current_server = server
         self.method = self.request.method
         self.state = 'stateless'
-        self.account_name = self.request.headers['X-Project-Name']
+        #self.account_name = self.request.headers['X-Project-Name']
         self._parse_vaco()
         
     def register_metric(self, key, value):

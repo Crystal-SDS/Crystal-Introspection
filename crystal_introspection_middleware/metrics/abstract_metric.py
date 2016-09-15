@@ -14,7 +14,7 @@ class AbstractMetric(object):
         self.metric_name = metric_name
         self.current_server = server
         self.method = self.request.method
-        self.state = 'stateless'
+        self.type = 'stateless'
         #self.account_name = self.request.headers['X-Project-Name']
         self._parse_vaco()
         
@@ -23,12 +23,15 @@ class AbstractMetric(object):
         Send data to publish thread
         """
         routing_key = self.metric_name
-        if self.state == "stateful":
+        if self.type == 'stateful':
             self.crystal_control.publish_stateful_metric(routing_key,
                                                          key, value)
-        else: 
+        elif self.type == 'stateless': 
             self.crystal_control.publish_stateless_metric(routing_key, 
                                                           key, value)
+        elif self.type == 'force':
+            self.crystal_control.force_publish_metric(routing_key, 
+                                                      key, value)
         
     def _is_object_request(self):
         if self.current_server == 'proxy':

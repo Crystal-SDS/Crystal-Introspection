@@ -49,6 +49,9 @@ class CrystalIntrospectionControl(object):
     
     def publish_stateless_metric(self,routing_key, key, value):
         self.publish_thread.publish_stateless(routing_key, key, value)
+        
+    def force_publish_metric(self,routing_key, key, value):
+        self.publish_thread.force_publish_metric(routing_key, key, value)
 
 
 class PublishThread(Thread):
@@ -92,6 +95,20 @@ class PublishThread(Thread):
             self.monitoring_stateless_data[routing_key][key] = 0
                   
         self.monitoring_stateless_data[routing_key][key] += value
+        
+    def force_publish_metric(self, routing_key, key, value):
+        date = datetime.now(pytz.timezone(time.tzname[0]))
+        rabbit = pika.BlockingConnection(self.parameters)
+        channel = rabbit.channel()
+        
+        data = dict()
+        data[self.host_name] = dict()
+        data[self.host_name][key] = value
+        data[self.host_name]['@timestamp'] = str(date.isoformat())
+
+        channel.basic_publish(exchange=self.exchange, 
+                              routing_key=routing_key, 
+                              body=json.dumps(data))
 
     def run(self):
         data = dict()
@@ -118,7 +135,7 @@ class PublishThread(Thread):
             for routing_key in self.monitoring_statefull_data.keys():
                 data[self.host_name] = self.monitoring_statefull_data[routing_key].copy()
                 data[self.host_name]['@timestamp'] = str(date.isoformat())
-                
+
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
                                       body=json.dumps(data))

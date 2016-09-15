@@ -6,7 +6,7 @@ class ActivePutRequestsContainer(AbstractMetric):
         """
         Execute Metric
         """
-        self.state = 'stateful'
+        self.type = 'stateful'
         
         if self.method == "PUT" and self._is_object_request():
             self._intercept_put()

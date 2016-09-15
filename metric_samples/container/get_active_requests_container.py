@@ -6,7 +6,7 @@ class ActiveGetRequestsContainer(AbstractMetric):
         """
         Execute Metric
         """
-        self.state = 'stateful'
+        self.type = 'stateful'
         
         if self.method == "GET" and self._is_object_request():
             self._intercept_get()

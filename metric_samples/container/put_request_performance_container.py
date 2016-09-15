@@ -5,6 +5,8 @@ import time
 class PutRequestPerformanceContainer(AbstractMetric):
     
     def execute(self):
+        self.type = 'force'
+        
         if self.method == "PUT" and self._is_object_request():
             self._intercept_put()
             self.start_time = time.time()

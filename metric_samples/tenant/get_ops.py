@@ -1,6 +1,7 @@
-from abstract_metric import AbstractMetric
+from crystal_introspection_middleware.metrics.abstract_metric import AbstractMetric
 
-class GetTenant(AbstractMetric):
+
+class GetOps(AbstractMetric):
         
     def execute(self):
         """

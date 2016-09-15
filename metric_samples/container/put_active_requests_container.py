@@ -1,6 +1,6 @@
-from abstract_metric import AbstractMetric
+from crystal_introspection_middleware.metrics.abstract_metric import AbstractMetric
 
-class ActivePutRequests(AbstractMetric):
+class ActivePutRequestsContainer(AbstractMetric):
         
     def execute(self):
         """
@@ -10,9 +10,9 @@ class ActivePutRequests(AbstractMetric):
         
         if self.method == "PUT" and self._is_object_request():
             self._intercept_put()
-            self.register_metric(self.account,1)
+            self.register_metric(self.account+"/"+self.container,1)
 
         return self.request
 
     def on_finish(self):
-        self.register_metric(self.account,-1)
+        self.register_metric(self.account+"/"+self.container,-1)

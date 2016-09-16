@@ -1,6 +1,6 @@
 from crystal_introspection_middleware.metrics.abstract_metric import AbstractMetric
 
-class ActiveGetRequestsContainer(AbstractMetric):
+class GetActiveRequestsContainer(AbstractMetric):
         
     def execute(self):
         """

@@ -117,28 +117,37 @@ class PublishThread(Thread):
             date = datetime.now(pytz.timezone(time.tzname[0]))
             rabbit = pika.BlockingConnection(self.parameters)
             channel = rabbit.channel()
+            
             for routing_key in self.monitoring_stateless_data.keys():
                 data[self.host_name] = self.monitoring_stateless_data[routing_key].copy()
-                
+                data[self.host_name]['@timestamp'] = str(date.isoformat())
                 for key in self.monitoring_stateless_data[routing_key].keys():
                     if self.monitoring_stateless_data[routing_key][key] == 0:
-                        del self.monitoring_stateless_data[routing_key]
+                        del self.monitoring_stateless_data[routing_key][key]
                     else:
                         self.monitoring_stateless_data[routing_key][key] = 0
-
-                data[self.host_name]['@timestamp'] = str(date.isoformat())
+                
+                if not self.monitoring_stateless_data[routing_key]:
+                    del self.monitoring_stateless_data[routing_key]
 
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
                                       body=json.dumps(data))
-                
+            
             for routing_key in self.monitoring_statefull_data.keys():
                 data[self.host_name] = self.monitoring_statefull_data[routing_key].copy()
                 data[self.host_name]['@timestamp'] = str(date.isoformat())
-
+                for key in self.monitoring_statefull_data[routing_key].keys():
+                    if self.monitoring_statefull_data[routing_key][key] == 0:
+                        del self.monitoring_statefull_data[routing_key][key]
+                        
+                if not self.monitoring_statefull_data[routing_key]:
+                    del self.monitoring_statefull_data[routing_key]
+                
                 channel.basic_publish(exchange=self.exchange, 
                                       routing_key=routing_key, 
                                       body=json.dumps(data))
+                
 
 
 class ControlThread(Thread):

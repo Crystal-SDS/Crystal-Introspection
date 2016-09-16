@@ -15,6 +15,7 @@ class AbstractMetric(object):
         self.current_server = server
         self.method = self.request.method
         self.type = 'stateless'
+        self.read_timeout = 30 # seconds
         #self.account_name = self.request.headers['X-Project-Name']
         self._parse_vaco()
         
@@ -95,10 +96,9 @@ class AbstractMetric(object):
 
         if self.method == 'GET':
             if self.current_server == 'object':
-                self.response.app_iter = IterLikeFileDescriptor(reader,
-                                                                metrics, 10)
+                self.response.app_iter = IterLikeFileDescriptor(reader, metrics, self.read_timeout)
             if self.current_server == 'proxy':
-                self.response.app_iter = IterLikeGetProxy(reader, metrics, 10)
+                self.response.app_iter = IterLikeGetProxy(reader, metrics, self.read_timeout)
 
     def _intercept_put(self):
         reader = self._get_object_reader()
@@ -106,8 +106,7 @@ class AbstractMetric(object):
         metrics.append(self)
         
         if self.method == 'PUT':
-            self.request.environ['wsgi.input'] = IterLikePut(reader,
-                                                             metrics, 10)
+            self.request.environ['wsgi.input'] = IterLikePut(reader, metrics, self.read_timeout)
 
     def _parse_vaco(self):
         if self._is_object_request():

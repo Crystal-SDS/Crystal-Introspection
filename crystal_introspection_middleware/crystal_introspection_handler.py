@@ -95,21 +95,31 @@ class CrystalIntrospectionHandler(object):
             for metric_key in metrics:
                 metric = metrics[metric_key]
                 if metric['in_flow'] == 'True':
-                    self.logger.info('Crystal Introspection - Go to execute '
-                                     'metric on input flow: '+metric['metric_name'])
                     metric_class = self._import_metric(metric)            
                     self.request = metric_class.execute()
     
+            if hasattr(self.request.environ['wsgi.input'], 'metrics'):
+                metric_list = list()
+                for metric in self.request.environ['wsgi.input'].metrics:
+                    metric_list.append(metric.metric_name.split('.')[1])
+                self.logger.info('Crystal Introspection - Go to execute '
+                                 'metrics on input flow: ' + str(metric_list))
+            
             self.response = self.request.get_response(self.app)
             
             if self.response.is_success:            
                 for metric_key in metrics:
                     metric = metrics[metric_key]
                     if metric['out_flow'] == 'True':
-                        self.logger.info('Crystal Introspection - Go to execute '
-                                         'metric on output flow: '+metric['metric_name'])
                         metric_class = self._import_metric(metric)            
                         self.response = metric_class.execute()
+            
+            if hasattr(self.response.app_iter, 'metrics'):
+                metric_list = list()
+                for metric in self.response.app_iter.metrics:
+                    metric_list.append(metric.metric_name.split('.')[1])
+                self.logger.info('Crystal Introspection - Go to execute '
+                                 'metrics on output flow: ' + str(metric_list))
             
             return self.response
         

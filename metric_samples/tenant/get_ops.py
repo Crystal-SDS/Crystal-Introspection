@@ -8,6 +8,6 @@ class GetOps(AbstractMetric):
         Execute Metric
         """
         if self.method == "GET" and self._is_object_request():
-            self.register_metric(self.account,1)
+            self.register_metric(self.account, 1)
 
         return self.response

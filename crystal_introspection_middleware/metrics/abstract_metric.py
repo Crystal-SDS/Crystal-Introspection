@@ -36,7 +36,7 @@ class AbstractMetric(object):
         
     def _is_object_request(self):
         if self.current_server == 'proxy':
-            path =  self.request.environ['PATH_INFO']
+            path = self.request.environ['PATH_INFO']
             if path.endswith('/'):
                 path = path[:-1]
             splitted_path = path.split('/')

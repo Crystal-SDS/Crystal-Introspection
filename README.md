@@ -126,12 +126,19 @@ class PutActiveRequests(AbstractMetric):
         self.register_metric(self.account, -1)
 ```
 
+Metric classes (inheriting from AbstractMetric) must implement the `execute()` method and can implement the optional `on_read()` and `on_finish()` methods.
+
+* `execute()`: This method is the main interception point. If the metric needs access to the data flow or needs to know when the request has finished, it has to call `self._intercept_get()` or `self._intercept_put()`.
+ 
+* `on_read()`: this method is called if the metric has previously called `self._intercept_get()` or `self._intercept_put()`. All read chunks will enter this method. 
+
+* `on_finish()`: this method is called if the metric has previously called `self._intercept_get()` or `self._intercept_put()`. This method is called once the request has been completed.
 
 There are three types of metrics supported:
 
 * `stateless`: the default type. When the metric is published (typically at one second intervals), the internal value is reset to 0.
 
-* `stateful`: when the metric is published, the internal value is not reset. Thus, the value can be incremented/decremented during the next intervals.
+* `stateful`: when the metric is published, the internal value is not reset. Thus, the value can be incremented/decremented during the next intervals. In a previous example, a stateful metric is used to count the active PUT requests: whenever a request is intercepted the metric value is incremented, and when the request finishes the metric value is decremented. At periodic intervals the metric value is published, showing how many concurrent requests are being served at a given instant.  
 
 * `force`: this type of metric is published directly after the call to register_metric instead of being published at intervals.  
 

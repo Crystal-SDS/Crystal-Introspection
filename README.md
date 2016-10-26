@@ -1,8 +1,8 @@
-# Crystal Introspection Middleware for OpenStack Swift
+# Crystal Metric Middleware for OpenStack Swift
 
 _Please visit [Crystal controller](https://github.com/Crystal-SDS/controller/) for an overview of all Crystal components._
 
-This repository contains the code of the inspection triggers that provide distributed controllers with introspective information on the state of the system at runtime.
+Crystal Metric Middleware is a middleware for OpenStack Swift that dynamically manages monitoring metrics. This repository contains the code of the inspection triggers that provide distributed controllers with introspective information on the state of the system at runtime.
  
 ## Requirements
 
@@ -23,10 +23,10 @@ python setup.py install
 
 After that, it is necessary to configure OpenStack Swift to add the middleware to the proxy and/or object servers.
 
-* In the proxy servers, we need to add a new filter that must be called `crystal_introspection_handler` in `/etc/swift/proxy-server.conf`. Copy the lines below to the bottom part of the file:
+* In the proxy servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/proxy-server.conf`. Copy the lines below to the bottom part of the file:
 ```ini
-[filter:crystal_introspection_handler]
-use = egg:swift_crystal_introspection_middleware#crystal_introspection_handler
+[filter:crystal_metric_handler]
+use = egg:swift_crystal_metric_middleware#crystal_metric_handler
 execution_server = proxy
 rabbit_host = changeme
 rabbit_port = 5672
@@ -37,10 +37,10 @@ redis_port = 6379
 redis_db = 0
 ```
 
-* In the object servers, we need to add a new filter that must be called `crystal_introspection_handler` in `/etc/swift/object-server.conf`. Copy the lines below to the bottom part of the file:
+* In the object servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/object-server.conf`. Copy the lines below to the bottom part of the file:
 ```ini
-[filter:crystal_introspection_handler]
-use = egg:swift_crystal_introspection_middleware#crystal_introspection_handler
+[filter:crystal_metric_handler]
+use = egg:swift_crystal_metric_middleware#crystal_metric_handler
 execution_server = object
 rabbit_host = changeme
 rabbit_port = 5672
@@ -58,13 +58,13 @@ added before `crystal_filter_handler` filter.
 
 ## Usage
 
-Crystal Introspection Middleware is an extension point of Crystal: new metrics can be added in order to provide more information to the controller. 
+Crystal Metric Middleware is an extension point of Crystal: new metrics can be added in order to provide more information to the controller. 
 This repository includes some [metric samples](/metric_samples) like the number of GET/PUT operations, the number of active operations, the bandwidth used or the request performance.
 
 The code below is an example of a simple metric that counts GET requests:
 
 ```python
-from crystal_introspection_middleware.metrics.abstract_metric import AbstractMetric
+from crystal_metric_middleware.metrics.abstract_metric import AbstractMetric
 
 # The metric class inherits from AbstractMetric
 class GetOps(AbstractMetric):
@@ -147,8 +147,8 @@ A convenient [web dashboard](https://github.com/iostackproject/SDS-dashboard) is
 
 ## Support
 
-Please [open an issue](https://github.com/Crystal-SDS/introspection-middleware/issues/new) for support.
+Please [open an issue](https://github.com/Crystal-SDS/metric-middleware/issues/new) for support.
 
 ## Contributing
 
-Please contribute using [Github Flow](https://guides.github.com/introduction/flow/). Create a branch, add commits, and [open a pull request](https://github.com/Crystal-SDS/introspection-middleware/compare/).
+Please contribute using [Github Flow](https://guides.github.com/introduction/flow/). Create a branch, add commits, and [open a pull request](https://github.com/Crystal-SDS/metric-middleware/compare/).

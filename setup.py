@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-paste_factory = ['crystal_metric_middleware = '
+paste_factory = ['crystal_metric_handler = '
                  'crystal_metric_middleware.crystal_metric_handler:filter_factory']
 
 setup(name='swift_crystal_metric_middleware',

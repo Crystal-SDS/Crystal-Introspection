@@ -22,7 +22,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class CrystalIntrospectionControl(object):
+class CrystalMetricControl(object):
     __metaclass__ = Singleton
     
     def __init__(self, conf, log):

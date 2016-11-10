@@ -1,4 +1,4 @@
-from crystal_introspection_middleware.metrics.abstract_metric import AbstractMetric
+from crystal_metric_middleware.metrics.abstract_metric import AbstractMetric
 
 
 class PutBw(AbstractMetric):

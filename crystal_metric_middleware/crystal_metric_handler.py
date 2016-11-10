@@ -1,4 +1,4 @@
-from crystal_introspection_control import CrystalIntrospectionControl
+from crystal_metric_control import CrystalMetricControl
 from swift.common.swob import HTTPInternalServerError
 from swift.common.swob import HTTPException
 from swift.common.swob import wsgify
@@ -32,7 +32,8 @@ def _request_instance_property():
     return property(getter, setter,
                     doc="Force to tie the request to acc/con/obj vars")
 
-class CrystalIntrospectionHandler(object):
+
+class CrystalMetricHandler(object):
 
     request = _request_instance_property()
 
@@ -66,13 +67,13 @@ class CrystalIntrospectionHandler(object):
     def _start_control_threads(self):
         if not self.crystal_control.threads_started:
             try:
-                self.logger.info("Crystal Introspection - Starting threads.")
+                self.logger.info("Crystal Metric - Starting threads.")
                 self.crystal_control.publish_thread.start()
                 self.crystal_control.control_thread.start()
                 self.crystal_control.threads_started = True
                 time.sleep(0.1)
             except:
-                self.logger.info("Crystal Introspection - Error starting threads.")
+                self.logger.info("Crystal Metric - Error starting threads.")
             
     def _import_metric(self,metric):
         modulename = 'metrics.'+metric['metric_name'].rsplit('.', 1)[0]
@@ -102,7 +103,7 @@ class CrystalIntrospectionHandler(object):
                 metric_list = list()
                 for metric in self.request.environ['wsgi.input'].metrics:
                     metric_list.append(metric.metric_name.split('.')[1])
-                self.logger.info('Crystal Introspection - Go to execute '
+                self.logger.info('Crystal Metric - Go to execute '
                                  'metrics on input flow: ' + str(metric_list))
             
             self.response = self.request.get_response(self.app)
@@ -126,17 +127,17 @@ class CrystalIntrospectionHandler(object):
         return self.request.get_response(self.app)
 
 
-class CrystalIntrospectionHandlerMiddleware(object):
+class CrystalMetricHandlerMiddleware(object):
 
     def __init__(self, app, conf, crystal_conf):
         self.app = app
         self.exec_server = conf.get('execution_server')
-        self.logger = get_logger(conf, log_route='crystal_introspection_handler')
+        self.logger = get_logger(conf, log_route='crystal_metric_handler')
         self.conf = crystal_conf
-        self.handler_class = CrystalIntrospectionHandler
-        self.control_class = CrystalIntrospectionControl
+        self.handler_class = CrystalMetricHandler
+        self.control_class = CrystalMetricControl
         
-        ''' Singleton instance of Introspection control '''
+        ''' Singleton instance of Metric control '''
         self.crystal_control =  self.control_class(conf = self.conf,
                                                    log = self.logger)
         
@@ -148,18 +149,18 @@ class CrystalIntrospectionHandlerMiddleware(object):
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
-            self.logger.debug('crystal_introspection_handler call')
+            self.logger.debug('crystal_metric_handler call')
         except NotCrystalRequest:
             return req.get_response(self.app)            
 
         try:
             return request_handler.handle_request()
         except HTTPException:
-            self.logger.exception('Crystal Introspection execution failed')
+            self.logger.exception('Crystal Metric execution failed')
             raise
         except Exception:
-            self.logger.exception('Crystal Introspection execution failed')
-            raise HTTPInternalServerError(body='Crystal Introspection execution failed')
+            self.logger.exception('Crystal Metric execution failed')
+            raise HTTPInternalServerError(body='Crystal Metric execution failed')
 
 
 def filter_factory(global_conf, **local_conf):
@@ -186,8 +187,7 @@ def filter_factory(global_conf, **local_conf):
     crystal_conf['bind_port'] = conf.get('bind_port')
     crystal_conf['devices'] = conf.get('devices')
 
+    def swift_crystal_metric_middleware(app):
+        return CrystalMetricHandlerMiddleware(app, conf, crystal_conf)
 
-    def swift_crystal_introspection_middleware(app):
-        return CrystalIntrospectionHandlerMiddleware(app, conf, crystal_conf)
-
-    return swift_crystal_introspection_middleware
+    return swift_crystal_metric_middleware

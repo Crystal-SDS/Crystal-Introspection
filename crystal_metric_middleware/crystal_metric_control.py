@@ -7,7 +7,7 @@ import pika
 import redis
 import json
 import os
-
+from eventlet import greenthread
 
 
 SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
@@ -113,7 +113,7 @@ class PublishThread(Thread):
     def run(self):
         data = dict()
         while True:
-            time.sleep(self.interval)
+            greenthread.sleep(self.interval)
             date = datetime.now(pytz.timezone(time.tzname[0]))
             rabbit = pika.BlockingConnection(self.parameters)
             channel = rabbit.channel()
@@ -186,7 +186,7 @@ class ControlThread(Thread):
                     src = os.path.join(SRC_METRIC_PATH, file_name)
                     lnk = os.path.join(DST_METRIC_PATH, file_name)
                     os.symlink(src, lnk)
-                except:
+                except OSError as e:
                     pass
 
         return metric_list
@@ -194,7 +194,7 @@ class ControlThread(Thread):
     def run(self):
         while True:
             self.metric_list = self._get_workload_metrics()
-            time.sleep(self.interval)
+            greenthread.sleep(self.interval)
 
 
 class NodeStatusThread(Thread):
@@ -240,4 +240,4 @@ class NodeStatusThread(Thread):
                                                       'ip':self.host_ip,
                                                       'last_ping':time.time(),
                                                       'devices':json.dumps(swift_usage)})
-            time.sleep(self.interval)
+            greenthread.sleep(self.interval)

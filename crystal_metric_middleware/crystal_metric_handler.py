@@ -3,8 +3,7 @@ from swift.common.swob import HTTPInternalServerError
 from swift.common.swob import HTTPException
 from swift.common.swob import wsgify
 from swift.common.utils import get_logger
-import time
-
+from eventlet import greenthread
 
 PACKAGE_NAME = __name__.split('.')[0]
 
@@ -73,7 +72,7 @@ class CrystalMetricHandler(object):
                 self.crystal_control.publish_thread.start()
                 self.crystal_control.control_thread.start()
                 self.crystal_control.threads_started = True
-                time.sleep(0.1)
+                greenthread.sleep(0.1)
             except:
                 self.logger.info("Crystal Metric - Error starting threads.")
 

@@ -17,8 +17,10 @@ class AbstractMetric(object):
         self.method = self.request.method
         self.type = 'stateless'
         self.read_timeout = 30  # seconds
-        # self.account_name = self.request.headers['X-Project-Name']
+
         self._parse_vaco()
+        self.account_name = self.request.headers['X-Project-Name']
+        self.account = self.account_name + "#:#" + self.account_id
 
     def register_metric(self, key, value):
         """
@@ -112,9 +114,9 @@ class AbstractMetric(object):
     def _parse_vaco(self):
         if self._is_object_request():
             if self.current_server == 'proxy':
-                _, self.account, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)
+                _, self.account_id, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)
             else:
-                _, _, self.account, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
+                _, _, self.account_id, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
 
     def execute(self):
         """ Execute Metric """

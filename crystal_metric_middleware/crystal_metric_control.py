@@ -6,6 +6,7 @@ import pytz
 import pika
 import redis
 import json
+import copy
 import os
 from eventlet import greenthread
 
@@ -119,41 +120,56 @@ class PublishThread(Thread):
 
     def run(self):
         data = dict()
+        last_date = None
+        monitoring_stateless_data_copy = None
+        monitoring_statefull_data_copy = None
+        last_monitoring_stateless_data = None
+
         rabbit = pika.BlockingConnection(self.parameters)
-        channel = rabbit.channel()
+
         while True:
-            greenthread.sleep(self.interval)
-            date = datetime.now(pytz.timezone(time.tzname[0]))
+            try:
+                greenthread.sleep(self.interval)
+                monitoring_stateless_data_copy = copy.deepcopy(self.monitoring_stateless_data)
+                monitoring_statefull_data_copy = copy.deepcopy(self.monitoring_statefull_data)
 
-            for routing_key in self.monitoring_stateless_data.keys():
-                data[self.host_name] = self.monitoring_stateless_data[routing_key].copy()
-                data[self.host_name]['@timestamp'] = str(date.isoformat())
-                for key in self.monitoring_stateless_data[routing_key].keys():
-                    if self.monitoring_stateless_data[routing_key][key] == 0:
-                        del self.monitoring_stateless_data[routing_key][key]
-                    else:
-                        self.monitoring_stateless_data[routing_key][key] = 0
+                date = datetime.now(pytz.timezone(time.tzname[0]))
 
-                if not self.monitoring_stateless_data[routing_key]:
-                    del self.monitoring_stateless_data[routing_key]
+                if last_date == date.strftime("%Y-%m-%d %H:%M:%S"):
+                    last_monitoring_stateless_data = copy.deepcopy(monitoring_stateless_data_copy)
+                    continue
 
-                channel.basic_publish(exchange=self.exchange,
-                                      routing_key=routing_key,
-                                      body=json.dumps(data))
+                last_date = date.strftime("%Y-%m-%d %H:%M:%S")
+                channel = rabbit.channel()
+                data[self.host_name] = dict()
 
-            for routing_key in self.monitoring_statefull_data.keys():
-                data[self.host_name] = self.monitoring_statefull_data[routing_key].copy()
-                data[self.host_name]['@timestamp'] = str(date.isoformat())
-                for key in self.monitoring_statefull_data[routing_key].keys():
-                    if self.monitoring_statefull_data[routing_key][key] == 0:
-                        del self.monitoring_statefull_data[routing_key][key]
+                for routing_key in monitoring_stateless_data_copy.keys():
+                    for tenant in monitoring_stateless_data_copy[routing_key].keys():
+                        if last_monitoring_stateless_data and last_monitoring_stateless_data[routing_key][tenant]:
+                            data[self.host_name][tenant] = monitoring_stateless_data_copy[routing_key][tenant] - last_monitoring_stateless_data[routing_key][tenant]
+                        else:
+                            data[self.host_name][tenant] = monitoring_stateless_data_copy[routing_key][tenant]
 
-                if not self.monitoring_statefull_data[routing_key]:
-                    del self.monitoring_statefull_data[routing_key]
+                    data[self.host_name]['@timestamp'] = str(date.isoformat())
 
-                channel.basic_publish(exchange=self.exchange,
-                                      routing_key=routing_key,
-                                      body=json.dumps(data))
+                    channel.basic_publish(exchange=self.exchange,
+                                          routing_key=routing_key,
+                                          body=json.dumps(data))
+
+                last_monitoring_stateless_data = copy.deepcopy(monitoring_stateless_data_copy)
+                data[self.host_name] = dict()
+
+                for routing_key in monitoring_statefull_data_copy.keys():
+                    for tenant in monitoring_statefull_data_copy[routing_key].keys():
+                            data[self.host_name][tenant] = monitoring_statefull_data_copy[routing_key][tenant]
+                    data[self.host_name]['@timestamp'] = str(date.isoformat())
+
+                    channel.basic_publish(exchange=self.exchange,
+                                          routing_key=routing_key,
+                                          body=json.dumps(data))
+
+            except:
+                last_monitoring_stateless_data = copy.deepcopy(self.monitoring_stateless_data)
 
 
 class ControlThread(Thread):

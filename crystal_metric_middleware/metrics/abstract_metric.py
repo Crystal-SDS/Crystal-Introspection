@@ -4,6 +4,7 @@ import os
 
 CHUNK_SIZE = 64 * 1024
 
+
 class AbstractMetric(object):
     def __init__(self, logger, crystal_control, metric_name, server,
                  request, response):
@@ -15,10 +16,10 @@ class AbstractMetric(object):
         self.current_server = server
         self.method = self.request.method
         self.type = 'stateless'
-        self.read_timeout = 30 # seconds
-        #self.account_name = self.request.headers['X-Project-Name']
+        self.read_timeout = 30  # seconds
+        # self.account_name = self.request.headers['X-Project-Name']
         self._parse_vaco()
-        
+
     def register_metric(self, key, value):
         """
         Send data to publish thread
@@ -27,58 +28,58 @@ class AbstractMetric(object):
         if self.type == 'stateful':
             self.crystal_control.publish_stateful_metric(routing_key,
                                                          key, value)
-        elif self.type == 'stateless': 
-            self.crystal_control.publish_stateless_metric(routing_key, 
+        elif self.type == 'stateless':
+            self.crystal_control.publish_stateless_metric(routing_key,
                                                           key, value)
         elif self.type == 'force':
-            self.crystal_control.force_publish_metric(routing_key, 
+            self.crystal_control.force_publish_metric(routing_key,
                                                       key, value)
-        
+
     def _is_object_request(self):
         if self.current_server == 'proxy':
             path = self.request.environ['PATH_INFO']
             if path.endswith('/'):
                 path = path[:-1]
             splitted_path = path.split('/')
-            if len(splitted_path)>4:   
+            if len(splitted_path) > 4:
                 return True
         else:
             # TODO: Check for object-server
             return True
-        
+
     def _is_get_already_intercepted(self):
-        return isinstance(self.response.app_iter,IterLikeFileDescriptor) or \
-               isinstance(self.response.app_iter,IterLikeGetProxy)
-         
+        return isinstance(self.response.app_iter, IterLikeFileDescriptor) or \
+               isinstance(self.response.app_iter, IterLikeGetProxy)
+
     def _is_put_already_intercepted(self):
-        return isinstance(self.request.environ['wsgi.input'],IterLikePut)
-               
+        return isinstance(self.request.environ['wsgi.input'], IterLikePut)
+
     def _get_applied_metrics_on_get(self):
         if hasattr(self.response.app_iter, 'metrics'):
             metrics = self.response.app_iter.metrics
             self.response.app_iter.metrics = list()
-            return metrics 
+            return metrics
         else:
             return list()
-    
+
     def _get_applied_metrics_on_put(self):
         if hasattr(self.request.environ['wsgi.input'], 'metrics'):
             metrics = self.request.environ['wsgi.input'].metrics
             self.request.environ['wsgi.input'].metrics = list()
-            return metrics 
+            return metrics
         else:
             return list()
-        
+
     def _get_object_reader(self):
 
         if self.method == 'GET':
             if self._is_get_already_intercepted():
                 reader = self.response.app_iter.obj_data
                 self.response.app_iter.closed = True
-                
+
             elif self.current_server == 'proxy':
                 reader = self.response.app_iter
-                    
+
             elif self.current_server == 'object':
                 reader = self.response.app_iter._fp
 
@@ -88,7 +89,7 @@ class AbstractMetric(object):
             reader = self.request.environ['wsgi.input'].obj_data
 
         return reader
-    
+
     def _intercept_get(self):
         reader = self._get_object_reader()
         metrics = self._get_applied_metrics_on_get()
@@ -104,21 +105,21 @@ class AbstractMetric(object):
         reader = self._get_object_reader()
         metrics = self._get_applied_metrics_on_put()
         metrics.append(self)
-        
+
         if self.method == 'PUT':
             self.request.environ['wsgi.input'] = IterLikePut(reader, metrics, self.read_timeout)
 
     def _parse_vaco(self):
         if self._is_object_request():
-            if self.current_server == 'proxy':  
-                _, self.account, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)      
+            if self.current_server == 'proxy':
+                _, self.account, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)
             else:
                 _, _, self.account, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
-    
+
     def execute(self):
         """ Execute Metric """
         raise NotImplementedError()
-    
+
     def on_read(self, chunk):
         pass
 
@@ -127,25 +128,25 @@ class AbstractMetric(object):
 
 
 class IterLike(object):
-    
+
     def __init__(self, obj_data, metrics, timeout):
         self.closed = False
         self.obj_data = obj_data
         self.timeout = timeout
         self.metrics = metrics
         self.buf = b''
-         
+
     def __iter__(self):
         return self
 
-    def _apply_metrics_on_read(self,chunk):     
+    def _apply_metrics_on_read(self, chunk):
         for metric in self.metrics:
             metric.on_read(chunk)
-        
+
     def _apply_metrics_on_finish(self):
         for metric in self.metrics:
             metric.on_finish()
-            
+
     def read_with_timeout(self, size):
         raise NotImplementedError()
 
@@ -244,14 +245,14 @@ class IterLikePut(IterLike):
             data = self.buf
             self.buf = b''
         return data
-    
+
     def close(self):
         if self.closed:
             return
         self._apply_metrics_on_finish()
         self.closed = True
-        
-        
+
+
 class IterLikeGetProxy(IterLike):
 
     def read_with_timeout(self, size):
@@ -324,4 +325,3 @@ class IterLikeFileDescriptor(IterLike):
             return
         os.close(self.obj_data)
         self.closed = True
-        

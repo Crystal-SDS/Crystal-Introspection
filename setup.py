@@ -4,7 +4,7 @@ paste_factory = ['crystal_metric_handler = '
                  'crystal_metric_middleware.crystal_metric_handler:filter_factory']
 
 setup(name='swift_crystal_metric_middleware',
-      version='0.0.3',
+      version='0.1.0',
       description='Crystal metric middleware for OpenStack Swift',
       author='The AST-IOStack Team: Josep Sampe, Raul Gracia',
       url='http://iostack.eu',

@@ -3,15 +3,15 @@ import time
 
 
 class GetRequestPerformanceContainer(AbstractMetric):
-    
+
     def execute(self):
         self.type = 'force'
-        
+
         if self.method == "GET" and self._is_object_request():
             self._intercept_get()
             self.start_time = time.time()
             self.request_size = 0
-            
+
         return self.response
 
     def on_read(self, chunk):

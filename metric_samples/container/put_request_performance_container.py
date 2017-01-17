@@ -19,4 +19,4 @@ class PutRequestPerformanceContainer(AbstractMetric):
 
     def on_finish(self):
         transfer_perf = ((self.request_size/(time.time()-self.start_time))/1024.0)/1024
-        self.register_metric(self.account+"/"+self.container, transfer_perf)
+        self.register_metric(self.account_and_container, transfer_perf)

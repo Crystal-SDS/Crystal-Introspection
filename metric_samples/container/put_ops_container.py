@@ -8,6 +8,6 @@ class PutOpsContainer(AbstractMetric):
         Execute Metric
         """
         if self.method == "PUT" and self._is_object_request():
-            self.register_metric(self.account+"/"+self.container, 1)
+            self.register_metric(self.account_and_container, 1)
 
         return self.request

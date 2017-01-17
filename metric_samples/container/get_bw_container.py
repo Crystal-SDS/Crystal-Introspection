@@ -17,4 +17,4 @@ class GetBwContainer(AbstractMetric):
     def on_read(self, chunk):
         ''' In this case, the metric count the number of bytes '''
         mbytes = (len(chunk)/1024.0)/1024
-        self.register_metric(self.account+"/"+self.container, mbytes)
+        self.register_metric(self.account_and_container, mbytes)

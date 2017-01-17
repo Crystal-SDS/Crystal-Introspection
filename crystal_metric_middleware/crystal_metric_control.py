@@ -125,8 +125,6 @@ class PublishThread(Thread):
         monitoring_statefull_data_copy = None
         last_monitoring_stateless_data = None
 
-        rabbit = pika.BlockingConnection(self.parameters)
-
         while True:
             try:
                 greenthread.sleep(self.interval)
@@ -140,10 +138,11 @@ class PublishThread(Thread):
                     continue
 
                 last_date = date.strftime("%Y-%m-%d %H:%M:%S")
+                rabbit = pika.BlockingConnection(self.parameters)
                 channel = rabbit.channel()
-                data[self.host_name] = dict()
 
                 for routing_key in monitoring_stateless_data_copy.keys():
+                    data[self.host_name] = dict()
                     for tenant in monitoring_stateless_data_copy[routing_key].keys():
                         if last_monitoring_stateless_data and last_monitoring_stateless_data[routing_key][tenant]:
                             data[self.host_name][tenant] = monitoring_stateless_data_copy[routing_key][tenant] - last_monitoring_stateless_data[routing_key][tenant]
@@ -157,9 +156,9 @@ class PublishThread(Thread):
                                           body=json.dumps(data))
 
                 last_monitoring_stateless_data = copy.deepcopy(monitoring_stateless_data_copy)
-                data[self.host_name] = dict()
 
                 for routing_key in monitoring_statefull_data_copy.keys():
+                    data[self.host_name] = dict()
                     for tenant in monitoring_statefull_data_copy[routing_key].keys():
                             data[self.host_name][tenant] = monitoring_statefull_data_copy[routing_key][tenant]
                     data[self.host_name]['@timestamp'] = str(date.isoformat())

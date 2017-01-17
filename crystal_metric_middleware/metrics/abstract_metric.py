@@ -21,6 +21,7 @@ class AbstractMetric(object):
         self._parse_vaco()
         self.account_name = self.request.headers['X-Project-Name']
         self.account = self.account_name + "#:#" + self.account_id
+        self.account_and_container = self.account_name + "/" + self.container + "#:#" + self.account_id + "/" + self.container
 
     def register_metric(self, key, value):
         """

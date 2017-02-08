@@ -14,6 +14,11 @@ Crystal Metric Middleware is a middleware for OpenStack Swift that dynamically m
 
 * [Redis](http://redis.io/)
 
+* Install the following dependencies:
+```sh
+pip install redis pika pytz eventlet
+```
+
 ## Installation
 
 To install the module you can run the next command in the root directory:
@@ -21,7 +26,7 @@ To install the module you can run the next command in the root directory:
 python setup.py install
 ```
 
-After that, it is necessary to configure OpenStack Swift to add the middleware to the proxy and/or object servers.
+After that, it is necessary to configure OpenStack Swift to add the middleware to the proxy and object servers.
 
 * In the proxy servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/proxy-server.conf`. Copy the lines below to the bottom part of the file:
 ```ini
@@ -51,10 +56,14 @@ redis_port = 6379
 redis_db = 0
 ```
 
-* Also, it is necessary to add this filter to the pipeline variable. This filter must be
-added before `crystal_filter_handler` filter.
+* Also, it is necessary to add this filter to the pipeline variable. This filter must be added after `keystoneauth` filter
+and before `crystal_filter_handler`, `slo`, `proxy-logging` and `proxy-server` filters.
 
-* The last step is to restart the proxy-server/object-server service.
+* The last step is to restart the proxy-server/object-server service:
+```bash
+sudo swift-init proxy restart
+sudo swift-init object restart
+```
 
 ## Usage
 

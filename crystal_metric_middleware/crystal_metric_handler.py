@@ -120,7 +120,7 @@ class CrystalMetricHandler(object):
                 metric_list = list()
                 for metric in self.response.app_iter.metrics:
                     metric_list.append(metric.metric_name.split('.')[1])
-                self.logger.info('Crystal Introspection - Go to execute '
+                self.logger.info('Crystal Metric - Go to execute '
                                  'metrics on output flow: ' + str(metric_list))
 
             return self.response

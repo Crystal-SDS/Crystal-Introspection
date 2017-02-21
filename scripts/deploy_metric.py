@@ -1,18 +1,17 @@
 #!/usr/bin/python
 
-'''
+"""
 Script to install a metric on the metric middleware for Swift as part of the
 Crystal project. This is for testing the metric middleware alone.
 
 @author Daniel Barcelona
-'''
+"""
 
 import sys
-import os
 import os.path
 import errno
 import importlib
-from shutil import copyfile, copymode
+from shutil import copyfile
 
 import redis
 from redis.exceptions import RedisError
@@ -25,7 +24,7 @@ if len(sys.argv) == 2:
     # Check file
     metric_file = os.path.abspath(sys.argv[1])
 
-    if (not os.path.isfile(metric_file)):
+    if not os.path.isfile(metric_file):
         sys.exit("ERROR: The given file is missing.")
 
     metric_name = os.path.basename(metric_file)
@@ -54,7 +53,7 @@ if len(sys.argv) == 2:
     sys.path.append(WORKLOAD_METRICS_DIR)
     module = importlib.import_module(metric_name.split('.')[0])
     class_ = True
-    while (class_):
+    while class_:
         metric_class = raw_input("Enter the metric class name: ")
         try:
             getattr(module, metric_class)
@@ -65,23 +64,23 @@ if len(sys.argv) == 2:
 
     # Inflow or outflow
     inflow = raw_input("Is it inflow? (y or n)")
-    while (inflow not in ['y', 'n']):
+    while inflow not in ['y', 'n']:
         inflow = raw_input("Please write 'y' or 'n'.")
-    if (inflow == "y"):
+    if inflow == "y":
         isin = 'True'
     else:
         isin = 'False'
     outflow = raw_input("Is it outflow? (y or n)")
-    while (outflow not in ['y', 'n']):
+    while outflow not in ['y', 'n']:
         outflow = raw_input("Please write 'y' or 'n'.")
-    if (outflow == "y"):
+    if outflow == "y":
         isout = 'True'
     else:
         isout = 'False'
 
     # Server where to execute
     server = raw_input("To execute on proxy or on object server?")
-    while (server not in ['proxy', 'object']):
+    while server not in ['proxy', 'object']:
         server = raw_input("Please write 'proxy' or 'object'.")
 
     # Load it to REDIS

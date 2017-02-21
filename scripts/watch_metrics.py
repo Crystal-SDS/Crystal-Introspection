@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
-'''
+"""
 This script creates a rabbit communication and a queue to get all messages
 sent by a metric to print them out on screen. This is for testing purpose on
 the metric middelware for Swift as part of the Crystal project.
 
 @author Daniel Barcelona
-'''
+"""
 
 import sys
 import signal
@@ -32,7 +32,7 @@ def stop(signal, frame):
     sys.exit(0)
 
 
-if (len(sys.argv) == 2):
+if len(sys.argv) == 2:
     parameters = pika.ConnectionParameters(host=RABBIT_HOST,
                                            port=RABBIT_PORT,
                                            credentials=RABBIT_CREDENTIALS)

@@ -1,8 +1,9 @@
-''' Crystal SDS
+"""
+Crystal SDS
 Unit test for the metrics middelware. This will deploy a GetOps metric on Swift
 and generate various get calls in one second to test if messages are sent to a
 RabbitMQ queue.
-'''
+"""
 
 import unittest
 import uuid
@@ -170,7 +171,7 @@ class MetricTestCase(unittest.TestCase):
         self.channel.connection.remove_timeout(self.timeout)
 
     def callback(self):
-        if (self.stop):
+        if self.stop:
             self.channel.stop_consuming()
         else:
             self.timeout = self.channel.connection.add_timeout(.3, self.callback)
@@ -184,5 +185,5 @@ class MetricTestCase(unittest.TestCase):
         # if not self.received:
         self.received = True
         data = json.loads(body)
-        if (self.count < data[self.host][self.account]):
+        if self.count < data[self.host][self.account]:
             self.count = data[self.host][self.account]

@@ -275,6 +275,7 @@ class IterLikeGetProxy(IterLike):
         if len(self.buf) < size:
             self.buf += self.read_with_timeout(size - len(self.buf))
             if self.buf == b'':
+                self.close()
                 raise StopIteration('Stopped iterator ex')
 
         if len(self.buf) > size:
@@ -313,6 +314,7 @@ class IterLikeFileDescriptor(IterLike):
                     self.close()
                     raise StopIteration('Stopped iterator ex')
             else:
+                self.close()
                 raise StopIteration('Stopped iterator ex')
 
         if len(self.buf) > size:

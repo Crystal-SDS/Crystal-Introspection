@@ -79,6 +79,9 @@ class PublishThread(Thread):
                                                     port=rabbit_port,
                                                     credentials=credentials)
 
+        self.rabbit = pika.BlockingConnection(self.parameters)
+        self.channel = self.rabbit.channel()
+
     def publish_statefull(self, routing_key, key, value):
         if routing_key not in self.monitoring_statefull_data:
             self.monitoring_statefull_data[routing_key] = dict()
@@ -105,18 +108,15 @@ class PublishThread(Thread):
 
     def force_publish_metric(self, routing_key, key, value):
         date = datetime.now(pytz.timezone(time.tzname[0]))
-        rabbit = pika.BlockingConnection(self.parameters)
-        channel = rabbit.channel()
 
         data = dict()
         data[self.host_name] = dict()
         data[self.host_name][key] = value
         data[self.host_name]['@timestamp'] = str(date.isoformat())
 
-        channel.basic_publish(exchange=self.exchange,
-                              routing_key=routing_key,
-                              body=json.dumps(data))
-        rabbit.close()
+        self.channel.basic_publish(exchange=self.exchange,
+                                   routing_key=routing_key,
+                                   body=json.dumps(data))
 
     def run(self):
         data = dict()
@@ -138,8 +138,6 @@ class PublishThread(Thread):
                     continue
 
                 last_date = date.strftime("%Y-%m-%d %H:%M:%S")
-                rabbit = pika.BlockingConnection(self.parameters)
-                channel = rabbit.channel()
 
                 for routing_key in monitoring_stateless_data_copy.keys():
                     data[self.host_name] = dict()
@@ -151,9 +149,9 @@ class PublishThread(Thread):
 
                     data[self.host_name]['@timestamp'] = str(date.isoformat())
 
-                    channel.basic_publish(exchange=self.exchange,
-                                          routing_key=routing_key,
-                                          body=json.dumps(data))
+                    self.channel.basic_publish(exchange=self.exchange,
+                                               routing_key=routing_key,
+                                               body=json.dumps(data))
 
                 last_monitoring_stateless_data = copy.deepcopy(monitoring_stateless_data_copy)
 
@@ -163,11 +161,13 @@ class PublishThread(Thread):
                             data[self.host_name][tenant] = monitoring_statefull_data_copy[routing_key][tenant]
                     data[self.host_name]['@timestamp'] = str(date.isoformat())
 
-                    channel.basic_publish(exchange=self.exchange,
-                                          routing_key=routing_key,
-                                          body=json.dumps(data))
-
+                    self.channel.basic_publish(exchange=self.exchange,
+                                               routing_key=routing_key,
+                                               body=json.dumps(data))
             except:
+                # Recreate rabbit connection
+                self.rabbit = pika.BlockingConnection(self.parameters)
+                self.channel = self.rabbit.channel()
                 last_monitoring_stateless_data = copy.deepcopy(self.monitoring_stateless_data)
 
 

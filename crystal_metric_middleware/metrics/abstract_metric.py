@@ -214,7 +214,10 @@ class IterLike(object):
         if self.closed:
             return
         self._apply_metrics_on_finish()
-        self.obj_data.close()
+        try:
+            self.obj_data.close()
+        except AttributeError:
+            pass
         self.closed = True
 
     def __del__(self):

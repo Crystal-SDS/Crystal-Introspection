@@ -1,6 +1,7 @@
-from eventlet import Timeout
 import select
 import os
+from eventlet import Timeout
+from swift.common.request_helpers import SegmentedIterable
 
 CHUNK_SIZE = 64 * 1024
 
@@ -82,6 +83,8 @@ class AbstractMetric(object):
 
             elif self.current_server == 'proxy':
                 reader = self.response.app_iter
+                if isinstance(reader, SegmentedIterable):
+                    reader = reader.app_iter
 
             elif self.current_server == 'object':
                 reader = self.response.app_iter._fp

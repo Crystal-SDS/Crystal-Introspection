@@ -104,8 +104,8 @@ class CrystalMetricHandler(object):
                 metric_list = list()
                 for metric in self.request.environ['wsgi.input'].metrics:
                     metric_list.append(metric.metric_name.split('.')[1])
-                self.logger.info('Go to execute '
-                                 'metrics on input flow: ' + str(metric_list))
+                self.logger.info('Go to execute metrics on input flow: ' +
+                                 str(metric_list))
 
             self.response = self.request.get_response(self.app)
 

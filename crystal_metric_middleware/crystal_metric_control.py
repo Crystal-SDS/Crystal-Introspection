@@ -1,5 +1,6 @@
 from threading import Thread
 from datetime import datetime
+from eventlet import greenthread
 import socket
 import time
 import pytz
@@ -8,7 +9,7 @@ import redis
 import json
 import copy
 import os
-from eventlet import greenthread
+
 
 SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
 DST_METRIC_PATH = os.path.abspath(__file__).rsplit('/', 1)[0]+'/metrics'
@@ -202,13 +203,6 @@ class ControlThread(Thread):
             if metric['execution_server'] == self.server and \
                metric['enabled'] == 'True':
                 metric_list[key] = metric
-                file_name = metric_list[key]['metric_name']
-                try:
-                    src = os.path.join(SRC_METRIC_PATH, file_name)
-                    lnk = os.path.join(DST_METRIC_PATH, file_name)
-                    os.symlink(src, lnk)
-                except OSError:
-                    pass
 
         return metric_list
 

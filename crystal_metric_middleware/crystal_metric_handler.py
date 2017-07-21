@@ -4,11 +4,11 @@ from swift.common.swob import HTTPException
 from swift.common.swob import wsgify
 from swift.common.utils import get_logger
 from eventlet import greenthread
+import sys
+import os
 
-PACKAGE_NAME = __name__.split('.')[0]
 
-
-class NotCrystalRequest(Exception):
+class NotCrystalMetricRequest(Exception):
     pass
 
 
@@ -28,7 +28,7 @@ def _request_instance_property():
         try:
             self._extract_vaco()
         except ValueError:
-            raise NotCrystalRequest()
+            raise NotCrystalMetricRequest()
 
     return property(getter, setter,
                     doc="Force to tie the request to acc/con/obj vars")
@@ -47,6 +47,11 @@ class CrystalMetricHandler(object):
         self.method = self.request.method
         self.response = None
         self.crystal_control = crystal_control
+
+        # Add source directories to sys path
+        workload_metrics = os.path.join('/opt', 'crystal', 'workload_metrics')
+        sys.path.insert(0, workload_metrics)
+
         self._start_control_threads()
 
     def _extract_vaco(self):
@@ -63,7 +68,7 @@ class CrystalMetricHandler(object):
             _, _, self._account, self._container, self._obj = \
                 self.request.split_path(5, 5, rest_with_last=True)
         else:
-            raise NotCrystalRequest()
+            raise NotCrystalMetricRequest()
 
     def _start_control_threads(self):
         if not self.crystal_control.threads_started:
@@ -77,9 +82,9 @@ class CrystalMetricHandler(object):
                 self.logger.info("Error starting threads.")
 
     def _import_metric(self, metric):
-        modulename = 'metrics.'+metric['metric_name'].rsplit('.', 1)[0]
+        modulename = metric['metric_name'].rsplit('.', 1)[0]
         classname = metric['class_name']
-        m = __import__(PACKAGE_NAME+'.'+modulename, globals(), locals(), [classname])
+        m = __import__(modulename, globals(), locals(), [classname])
         m_class = getattr(m, classname)
         metric_class = m_class(self.logger, self.crystal_control, modulename,
                                self.exec_server, self.request, self.response)
@@ -103,7 +108,7 @@ class CrystalMetricHandler(object):
             if hasattr(self.request.environ['wsgi.input'], 'metrics'):
                 metric_list = list()
                 for metric in self.request.environ['wsgi.input'].metrics:
-                    metric_list.append(metric.metric_name.split('.')[1])
+                    metric_list.append(metric.metric_name)
                 self.logger.info('Go to execute metrics on input flow: ' +
                                  str(metric_list))
 
@@ -119,7 +124,7 @@ class CrystalMetricHandler(object):
             if hasattr(self.response.app_iter, 'metrics'):
                 metric_list = list()
                 for metric in self.response.app_iter.metrics:
-                    metric_list.append(metric.metric_name.split('.')[1])
+                    metric_list.append(metric.metric_name)
                 self.logger.info('Go to execute metrics on output flow: ' +
                                  str(metric_list))
 
@@ -148,12 +153,12 @@ class CrystalMetricHandlerMiddleware(object):
     def __call__(self, req):
         try:
             if self.exec_server == 'object':
-                raise NotCrystalRequest
+                raise NotCrystalMetricRequest
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
             self.logger.debug('call in %s' % (self.exec_server))
-        except NotCrystalRequest:
+        except NotCrystalMetricRequest:
             return req.get_response(self.app)
 
         try:

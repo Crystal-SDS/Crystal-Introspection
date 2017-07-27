@@ -178,14 +178,12 @@ def filter_factory(global_conf, **local_conf):
     conf.update(local_conf)
 
     crystal_conf = dict()
-    crystal_conf['execution_server'] = conf.get('execution_server', 'object')
+    crystal_conf['execution_server'] = conf.get('execution_server', 'proxy')
 
     crystal_conf['rabbit_host'] = conf.get('rabbit_host', 'controller')
     crystal_conf['rabbit_port'] = int(conf.get('rabbit_port', 5672))
     crystal_conf['rabbit_username'] = conf.get('rabbit_username', 'openstack')
-    crystal_conf['rabbit_password'] = conf.get('rabbit_password', 'rabbitmqastl1a4b4')
-    # crystal_conf['rabbit_username'] = conf.get('rabbit_username', 'test')
-    # crystal_conf['rabbit_password'] = conf.get('rabbit_password', 'test')
+    crystal_conf['rabbit_password'] = conf.get('rabbit_password', 'openstack')
 
     crystal_conf['redis_host'] = conf.get('redis_host', 'controller')
     crystal_conf['redis_port'] = int(conf.get('redis_port', 6379))
@@ -193,7 +191,7 @@ def filter_factory(global_conf, **local_conf):
 
     crystal_conf['bind_ip'] = conf.get('bind_ip')
     crystal_conf['bind_port'] = conf.get('bind_port')
-    crystal_conf['devices'] = conf.get('devices')
+    crystal_conf['devices'] = conf.get('devices', '/srv/node')
 
     def swift_crystal_metric_middleware(app):
         return CrystalMetricHandlerMiddleware(app, conf, crystal_conf)

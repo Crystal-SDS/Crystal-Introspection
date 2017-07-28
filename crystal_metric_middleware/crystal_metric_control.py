@@ -80,9 +80,6 @@ class PublishThread(Thread):
                                                     port=rabbit_port,
                                                     credentials=credentials)
 
-        self.rabbit = pika.BlockingConnection(self.parameters)
-        self.channel = self.rabbit.channel()
-
     def publish_statefull(self, routing_key, key, value):
         if routing_key not in self.monitoring_statefull_data:
             self.monitoring_statefull_data[routing_key] = dict()
@@ -125,6 +122,9 @@ class PublishThread(Thread):
         monitoring_stateless_data_copy = None
         monitoring_statefull_data_copy = None
         last_monitoring_stateless_data = None
+
+        self.rabbit = pika.BlockingConnection(self.parameters)
+        self.channel = self.rabbit.channel()
 
         while True:
             try:
@@ -181,13 +181,13 @@ class ControlThread(Thread):
         self.logger = logger
         self.server = self.conf.get('execution_server')
         self.interval = self.conf.get('control_interval', 10)
-        redis_host = self.conf.get('redis_host')
-        redis_port = self.conf.get('redis_port')
-        redis_db = self.conf.get('redis_db')
+        self.redis_host = self.conf.get('redis_host')
+        self.redis_port = self.conf.get('redis_port')
+        self.redis_db = self.conf.get('redis_db')
 
-        self.redis = redis.StrictRedis(redis_host,
-                                       redis_port,
-                                       redis_db)
+        self.redis = redis.StrictRedis(self.redis_host,
+                                       self.redis_port,
+                                       self.redis_db)
 
         self.metric_list = {}
 
@@ -208,8 +208,12 @@ class ControlThread(Thread):
 
     def run(self):
         while True:
-            self.metric_list = self._get_workload_metrics()
             greenthread.sleep(self.interval)
+            try:
+                self.metric_list = self._get_workload_metrics()
+            except:
+                self.logger.error("Unable to connect to " + self.redis_host +
+                                  " for getting the workload metrics.")
 
 
 class NodeStatusThread(Thread):
@@ -259,4 +263,5 @@ class NodeStatusThread(Thread):
                                   'last_ping': time.time(),
                                   'devices': json.dumps(swift_usage)})
             except:
-                pass
+                self.logger.error("Unable to connect to " + self.redis_host +
+                                  " for publishing the node status.")

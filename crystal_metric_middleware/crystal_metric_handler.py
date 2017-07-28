@@ -79,7 +79,7 @@ class CrystalMetricHandler(object):
                 self.crystal_control.threads_started = True
                 greenthread.sleep(0.1)
             except:
-                self.logger.info("Error starting threads.")
+                self.logger.error("Error starting threads.")
 
     def _import_metric(self, metric):
         modulename = metric['metric_name'].rsplit('.', 1)[0]

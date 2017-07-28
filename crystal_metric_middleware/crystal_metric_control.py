@@ -249,11 +249,14 @@ class NodeStatusThread(Thread):
 
     def run(self):
         while True:
-            swift_usage = self._get_swift_disk_usage()
-            self.redis.hmset(self.server+'_node:'+self.host_name,
-                             {'type': self.server,
-                              'name': self.host_name,
-                              'ip': self.host_ip,
-                              'last_ping': time.time(),
-                              'devices': json.dumps(swift_usage)})
             greenthread.sleep(self.interval)
+            try:
+                swift_usage = self._get_swift_disk_usage()
+                self.redis.hmset(self.server+'_node:'+self.host_name,
+                                 {'type': self.server,
+                                  'name': self.host_name,
+                                  'ip': self.host_ip,
+                                  'last_ping': time.time(),
+                                  'devices': json.dumps(swift_usage)})
+            except:
+                pass

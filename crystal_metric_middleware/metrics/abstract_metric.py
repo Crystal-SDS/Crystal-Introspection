@@ -28,7 +28,7 @@ class AbstractMetric(object):
         """
         Send data to publish thread
         """
-        routing_key = self.metric_name
+        routing_key = 'metrics.'+self.metric_name
         if self.type == 'stateful':
             self.crystal_control.publish_stateful_metric(routing_key,
                                                          key, value)

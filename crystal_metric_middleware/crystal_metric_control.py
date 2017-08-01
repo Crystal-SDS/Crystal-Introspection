@@ -225,17 +225,17 @@ class NodeStatusThread(Thread):
         self.logger = logger
         self.server = self.conf.get('execution_server')
         self.interval = self.conf.get('status_interval', 10)
-        redis_host = self.conf.get('redis_host')
-        redis_port = self.conf.get('redis_port')
-        redis_db = self.conf.get('redis_db')
+        self.redis_host = self.conf.get('redis_host')
+        self.redis_port = self.conf.get('redis_port')
+        self.redis_db = self.conf.get('redis_db')
 
         self.host_name = socket.gethostname()
         self.host_ip = socket.gethostbyname(self.host_name)
         self.devices = self.conf.get('devices')
 
-        self.redis = redis.StrictRedis(redis_host,
-                                       redis_port,
-                                       redis_db)
+        self.redis = redis.StrictRedis(self.redis_host,
+                                       self.redis_port,
+                                       self.redis_db)
 
         self.metric_list = {}
 

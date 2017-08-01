@@ -208,12 +208,12 @@ class ControlThread(Thread):
 
     def run(self):
         while True:
-            greenthread.sleep(self.interval)
             try:
                 self.metric_list = self._get_workload_metrics()
             except:
                 self.logger.error("Unable to connect to " + self.redis_host +
                                   " for getting the workload metrics.")
+            greenthread.sleep(self.interval)
 
 
 class NodeStatusThread(Thread):
@@ -253,7 +253,6 @@ class NodeStatusThread(Thread):
 
     def run(self):
         while True:
-            greenthread.sleep(self.interval)
             try:
                 swift_usage = self._get_swift_disk_usage()
                 self.redis.hmset(self.server+'_node:'+self.host_name,
@@ -265,3 +264,4 @@ class NodeStatusThread(Thread):
             except:
                 self.logger.error("Unable to connect to " + self.redis_host +
                                   " for publishing the node status.")
+            greenthread.sleep(self.interval)

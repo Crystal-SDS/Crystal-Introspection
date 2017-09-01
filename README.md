@@ -1,28 +1,21 @@
 # Crystal Metric Middleware for OpenStack Swift
 
-_Please visit [Crystal controller](https://github.com/Crystal-SDS/controller/) for an overview of all Crystal components._
+_Please visit [Crystal Installation](https://github.com/Crystal-SDS/INSTALLATION/) for an overview of all Crystal components._
 
 Crystal Metric Middleware is a middleware for OpenStack Swift that dynamically manages monitoring metrics. This repository contains the code of the inspection triggers that provide distributed controllers with introspective information on the state of the system at runtime.
  
 ## Requirements
 
-* An OpenStack Swift deployment (this project was tested in Kilo version).
+* An OpenStack Swift deployment (this project was tested from Kilo to Pike OpenStack releases).
 
-* A Crystal controller deployment.
-
-* [RabbitMQ](https://www.rabbitmq.com/)
-
-* [Redis](http://redis.io/)
-
-* Install the following dependencies:
-```sh
-pip install redis pika pytz eventlet
-```
+* A [Crystal controller](https://github.com/Crystal-SDS/controller) deployment.
 
 ## Installation
 
-To install the module you can run the next command in the root directory:
+To install the module, clone the repository and run the installation command in the root directory:
 ```sh
+git clone https://github.com/Crystal-SDS/metric-middleware
+cd metric-middleware
 python setup.py install
 ```
 

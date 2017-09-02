@@ -21,38 +21,78 @@ sudo python setup.py install
 
 After that, it is necessary to configure OpenStack Swift to add the middleware to the Proxy and Object servers.
 
-* In the proxy servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/proxy-server.conf`. Copy the lines below to the bottom part of the file:
+
+# Proxy
+
+Edit the `/etc/swift/proxy-server.conf` file in each Proxy Node, and perform the following changes:
+
+1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filter_handler` filter.
+
+```ini
+[pipeline:main]
+pipeline = catch_errors gatekeeper healthcheck proxy-logging cache container_sync bulk ratelimit authtoken keystoneauth container-quotas account-quotas crystal_metric_handler crystal_filter_handler slo dlo proxy-logging proxy-server
+
+```
+
+2. Add the configuration of the filter. Copy the lines below to the bottom part of the file:
+
 ```ini
 [filter:crystal_metric_handler]
 use = egg:swift_crystal_metric_middleware#crystal_metric_handler
+
+#Node Configuration
 execution_server = proxy
-rabbit_host = changeme
+region_id = 1
+zone_id = 1
+
+#RabbitMQ Configuration
+rabbit_host = controller
 rabbit_port = 5672
-rabbit_username = guest
-rabbit_password = guest
-redis_host = changeme
+rabbit_username = changeme
+rabbit_password = changeme
+
+#Reddis Configuration
+redis_host = controller
 redis_port = 6379
 redis_db = 0
+
 ```
 
-* In the object servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/object-server.conf`. Copy the lines below to the bottom part of the file:
+# Storage Node
+
+Edit the `/etc/swift/object-server.conf` file in each Storage Node, and perform the following changes:
+
+1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filter_handler` filter.
+```ini
+[pipeline:main]
+pipeline = healthcheck recon crystal_metric_handler crystal_filter_handler object-server
+
+```
+
+2. Add the configuration of the filter. Copy the lines below to the bottom part of the file:
+
 ```ini
 [filter:crystal_metric_handler]
 use = egg:swift_crystal_metric_middleware#crystal_metric_handler
+
+#Node Configuration
 execution_server = object
-rabbit_host = changeme
+region_id = 1
+zone_id = 1
+
+#RabbitMQ Configuration
+rabbit_host = controller
 rabbit_port = 5672
-rabbit_username = guest
-rabbit_password = guest
-redis_host = changeme
+rabbit_username = changeme
+rabbit_password = changeme
+
+#Reddis Configuration
+redis_host = controller
 redis_port = 6379
 redis_db = 0
 ```
 
-* Also, it is necessary to add this filter to the pipeline variable. This filter must be added after `keystoneauth` filter
-and before `crystal_filter_handler`, `slo`, `proxy-logging` and `proxy-server` filters.
-
-* The last step is to restart the proxy-server/object-server service:
+The last step is to restart the proxy-server/object-server services:
 ```bash
 sudo swift-init proxy restart
 sudo swift-init object restart

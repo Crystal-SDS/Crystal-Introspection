@@ -19,10 +19,10 @@ cd metric-middleware
 sudo python setup.py install
 ```
 
+
 After that, it is necessary to configure OpenStack Swift to add the middleware to the Proxy and Object servers.
 
-
-# Proxy
+### Proxy
 
 Edit the `/etc/swift/proxy-server.conf` file in each Proxy Node, and perform the following changes:
 
@@ -58,7 +58,7 @@ redis_db = 0
 
 ```
 
-# Storage Node
+### Storage Node
 
 Edit the `/etc/swift/object-server.conf` file in each Storage Node, and perform the following changes:
 

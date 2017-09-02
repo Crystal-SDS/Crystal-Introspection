@@ -16,10 +16,10 @@ To install the module, clone the repository and run the installation command in 
 ```sh
 git clone https://github.com/Crystal-SDS/metric-middleware
 cd metric-middleware
-python setup.py install
+sudo python setup.py install
 ```
 
-After that, it is necessary to configure OpenStack Swift to add the middleware to the proxy and object servers.
+After that, it is necessary to configure OpenStack Swift to add the middleware to the Proxy and Object servers.
 
 * In the proxy servers, we need to add a new filter that must be called `crystal_metric_handler` in `/etc/swift/proxy-server.conf`. Copy the lines below to the bottom part of the file:
 ```ini

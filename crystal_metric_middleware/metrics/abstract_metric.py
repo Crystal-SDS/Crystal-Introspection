@@ -7,6 +7,9 @@ CHUNK_SIZE = 64 * 1024
 
 
 class AbstractMetric(object):
+
+    type = 'stateless'
+
     def __init__(self, logger, crystal_control, metric_name, server,
                  request, response):
         self.logger = logger
@@ -16,40 +19,31 @@ class AbstractMetric(object):
         self.metric_name = metric_name
         self.current_server = server
         self.method = self.request.method
-        self.type = 'stateless'
         self.read_timeout = 30  # seconds
 
         self._parse_vaco()
-        self.account_name = self.request.headers['X-Project-Name']
-        self.account = self.account_name + "#:#" + self.account_id
-        self.account_and_container = self.account_name + "/" + self.container + "#:#" + self.account_id + "/" + self.container
 
-    def register_metric(self, key, value):
+        self.project_name = str(self.request.headers['X-Project-Name'])
+        self.data = dict()
+        self.data['project'] = self.project_name
+        self.data['container'] = os.path.join(self.project_name, self.container)
+        self.data['method'] = self.method
+
+    def register_metric(self, value):
         """
         Send data to publish thread
         """
-        routing_key = 'metrics.'+self.metric_name
+        metric_name = self.metric_name
+        self.data['value'] = value
         if self.type == 'stateful':
-            self.crystal_control.publish_stateful_metric(routing_key,
-                                                         key, value)
+            self.crystal_control.publish_stateful_metric(metric_name,
+                                                         self.data)
         elif self.type == 'stateless':
-            self.crystal_control.publish_stateless_metric(routing_key,
-                                                          key, value)
+            self.crystal_control.publish_stateless_metric(metric_name,
+                                                          self.data)
         elif self.type == 'force':
-            self.crystal_control.force_publish_metric(routing_key,
-                                                      key, value)
-
-    def _is_object_request(self):
-        if self.current_server == 'proxy':
-            path = self.request.environ['PATH_INFO']
-            if path.endswith('/'):
-                path = path[:-1]
-            splitted_path = path.split('/')
-            if len(splitted_path) > 4:
-                return True
-        else:
-            # TODO: Check for object-server
-            return True
+            self.crystal_control.force_publish_metric(metric_name,
+                                                      self.data)
 
     def _is_get_already_intercepted(self):
         return isinstance(self.response.app_iter, IterLikeFileDescriptor) or \
@@ -116,15 +110,23 @@ class AbstractMetric(object):
             self.request.environ['wsgi.input'] = IterLikePut(reader, metrics, self.read_timeout)
 
     def _parse_vaco(self):
-        if self._is_object_request():
-            if self.current_server == 'proxy':
-                _, self.account_id, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)
-            else:
-                _, _, self.account_id, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
+        if self.current_server == 'proxy':
+            _, self.account_id, self.container, self.object = self.request.split_path(4, 4, rest_with_last=True)
+        else:
+            _, _, self.account_id, self.container, self.object = self.request.split_path(5, 5, rest_with_last=True)
 
     def execute(self):
-        """ Execute Metric """
-        raise NotImplementedError()
+        if self.method == "GET":
+            self._intercept_get()
+            self.on_start()
+            return self.response
+        elif self.method == "PUT":
+            self._intercept_put()
+            self.on_start()
+            return self.request
+
+    def on_start(self):
+        pass
 
     def on_read(self, chunk):
         pass

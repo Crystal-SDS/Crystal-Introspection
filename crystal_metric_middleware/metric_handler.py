@@ -1,4 +1,4 @@
-from crystal_metric_control import CrystalMetricControl
+from metrics.metric_control import CrystalMetricControl
 from swift.common.swob import HTTPInternalServerError
 from swift.common.swob import HTTPException
 from swift.common.swob import wsgify
@@ -90,58 +90,56 @@ class CrystalMetricHandler(object):
                                self.exec_server, self.request, self.response)
         return metric_class
 
-    @property
-    def _is_valid_request(self):
-        return self.method == 'GET' or self.method == 'PUT'
-
     def handle_request(self):
-
-        if self._is_valid_request:
             metrics = self.crystal_control.get_metrics()
 
-            for metric_key in metrics:
-                metric = metrics[metric_key]
-                if metric['in_flow'] == 'True':
-                    metric_class = self._import_metric(metric)
-                    self.request = metric_class.execute()
-
-            if hasattr(self.request.environ['wsgi.input'], 'metrics'):
-                metric_list = list()
-                for metric in self.request.environ['wsgi.input'].metrics:
-                    metric_list.append(metric.metric_name)
-                self.logger.info('Go to execute metrics on input flow: ' +
-                                 str(metric_list))
-
-            self.response = self.request.get_response(self.app)
-
-            if self.response.is_success:
+            if self.method == 'PUT':
                 for metric_key in metrics:
                     metric = metrics[metric_key]
-                    if metric['out_flow'] == 'True':
+                    if metric['in_flow'] == 'True':
                         metric_class = self._import_metric(metric)
-                        self.response = metric_class.execute()
+                        self.request = metric_class.execute()
 
-            if hasattr(self.response.app_iter, 'metrics'):
-                metric_list = list()
-                for metric in self.response.app_iter.metrics:
-                    metric_list.append(metric.metric_name)
-                self.logger.info('Go to execute metrics on output flow: ' +
-                                 str(metric_list))
+                if hasattr(self.request.environ['wsgi.input'], 'metrics'):
+                    metric_list = list()
+                    for metric in self.request.environ['wsgi.input'].metrics:
+                        metric_list.append(metric.metric_name)
+                    self.logger.info('Go to execute metrics on PUT request: ' +
+                                     str(metric_list))
 
-            return self.response
+                return self.request.get_response(self.app)
 
-        return self.request.get_response(self.app)
+            elif self.method == 'GET':
+                self.response = self.request.get_response(self.app)
+
+                if self.response.is_success:
+                    for metric_key in metrics:
+                        metric = metrics[metric_key]
+                        if metric['out_flow'] == 'True':
+                            metric_class = self._import_metric(metric)
+                            self.response = metric_class.execute()
+
+                if hasattr(self.response.app_iter, 'metrics'):
+                    metric_list = list()
+                    for metric in self.response.app_iter.metrics:
+                        metric_list.append(metric.metric_name)
+                    self.logger.info('Go to execute metrics on GET request: ' +
+                                     str(metric_list))
+
+                return self.response
+            else:
+                return self.request.get_response(self.app)
 
 
-class CrystalMetricHandlerMiddleware(object):
+class CrystalMetricMiddleware(object):
 
-    def __init__(self, app, conf, crystal_conf):
+    def __init__(self, app, conf):
         self.app = app
         self.exec_server = conf.get('execution_server')
         self.logger = get_logger(conf, name=self.exec_server +
                                  "-server Crystal Metrics",
                                  log_route='crystal_metric_handler')
-        self.conf = crystal_conf
+        self.conf = conf
         self.handler_class = CrystalMetricHandler
         self.control_class = CrystalMetricControl
 
@@ -177,23 +175,22 @@ def filter_factory(global_conf, **local_conf):
     conf = global_conf.copy()
     conf.update(local_conf)
 
-    crystal_conf = dict()
-    crystal_conf['execution_server'] = conf.get('execution_server', 'proxy')
+    conf['execution_server'] = conf.get('execution_server', 'proxy')
+    conf['execution_server'] = conf.get('region_id', 1)
+    conf['execution_server'] = conf.get('zone_id', 1)
 
-    crystal_conf['rabbit_host'] = conf.get('rabbit_host', 'controller')
-    crystal_conf['rabbit_port'] = int(conf.get('rabbit_port', 5672))
-    crystal_conf['rabbit_username'] = conf.get('rabbit_username', 'openstack')
-    crystal_conf['rabbit_password'] = conf.get('rabbit_password', 'openstack')
+    conf['rabbit_host'] = conf.get('rabbit_host', 'controller')
+    conf['rabbit_port'] = int(conf.get('rabbit_port', 5672))
+    conf['rabbit_username'] = conf.get('rabbit_username', 'openstack')
+    conf['rabbit_password'] = conf.get('rabbit_password', 'openstack')
 
-    crystal_conf['redis_host'] = conf.get('redis_host', 'controller')
-    crystal_conf['redis_port'] = int(conf.get('redis_port', 6379))
-    crystal_conf['redis_db'] = int(conf.get('redis_db', 0))
+    conf['redis_host'] = conf.get('redis_host', 'controller')
+    conf['redis_port'] = int(conf.get('redis_port', 6379))
+    conf['redis_db'] = int(conf.get('redis_db', 0))
 
-    crystal_conf['bind_ip'] = conf.get('bind_ip')
-    crystal_conf['bind_port'] = conf.get('bind_port')
-    crystal_conf['devices'] = conf.get('devices', '/srv/node')
+    conf['devices'] = conf.get('devices', '/srv/node')
 
     def swift_crystal_metric_middleware(app):
-        return CrystalMetricHandlerMiddleware(app, conf, crystal_conf)
+        return CrystalMetricMiddleware(app, conf)
 
     return swift_crystal_metric_middleware

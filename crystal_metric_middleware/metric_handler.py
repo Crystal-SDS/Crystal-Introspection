@@ -176,8 +176,8 @@ def filter_factory(global_conf, **local_conf):
     conf.update(local_conf)
 
     conf['execution_server'] = conf.get('execution_server', 'proxy')
-    conf['execution_server'] = conf.get('region_id', 1)
-    conf['execution_server'] = conf.get('zone_id', 1)
+    conf['region_id'] = conf.get('region_id', 1)
+    conf['zone_id'] = conf.get('zone_id', 1)
 
     conf['rabbit_host'] = conf.get('rabbit_host', 'controller')
     conf['rabbit_port'] = int(conf.get('rabbit_port', 5672))

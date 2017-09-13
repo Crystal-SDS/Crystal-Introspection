@@ -313,7 +313,7 @@ class ControlThread(Thread):
         metric_list = dict()
         for key in metric_keys:
             metric = self.redis.hgetall(key)
-            if metric['execution_server'] == self.server and \
+            if self.server in metric['execution_server'] and \
                metric['enabled'] == 'True':
                 metric_list[key] = metric
 

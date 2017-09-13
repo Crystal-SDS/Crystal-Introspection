@@ -150,8 +150,6 @@ class CrystalMetricMiddleware(object):
     @wsgify
     def __call__(self, req):
         try:
-            if self.exec_server == 'object':
-                raise NotCrystalMetricRequest
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)

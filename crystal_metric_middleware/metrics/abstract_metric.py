@@ -28,6 +28,7 @@ class AbstractMetric(object):
         self.data['project'] = self.project_name
         self.data['container'] = os.path.join(self.project_name, self.container)
         self.data['method'] = self.method
+        self.data['server_type'] = self.current_server
 
     def register_metric(self, value):
         """
@@ -95,19 +96,14 @@ class AbstractMetric(object):
         metrics = self._get_applied_metrics_on_get()
         metrics.append(self)
 
-        if self.method == 'GET':
-            if self.current_server == 'object':
-                self.response.app_iter = IterLikeFileDescriptor(reader, metrics, self.read_timeout)
-            if self.current_server == 'proxy':
-                self.response.app_iter = IterLikeGetProxy(reader, metrics, self.read_timeout)
+        self.response.app_iter = IterGet(reader, metrics, self.read_timeout)
 
     def _intercept_put(self):
         reader = self._get_object_reader()
         metrics = self._get_applied_metrics_on_put()
         metrics.append(self)
 
-        if self.method == 'PUT':
-            self.request.environ['wsgi.input'] = IterLikePut(reader, metrics, self.read_timeout)
+        self.request.environ['wsgi.input'] = IterPut(reader, metrics, self.read_timeout)
 
     def _parse_vaco(self):
         if self.current_server == 'proxy':
@@ -135,7 +131,7 @@ class AbstractMetric(object):
         pass
 
 
-class IterLike(object):
+class Iter(object):
 
     def __init__(self, obj_data, metrics, timeout):
         self.closed = False
@@ -226,7 +222,7 @@ class IterLike(object):
         self.close()
 
 
-class IterLikePut(IterLike):
+class IterPut(Iter):
 
     def read_with_timeout(self, size):
         try:
@@ -264,7 +260,7 @@ class IterLikePut(IterLike):
         self.closed = True
 
 
-class IterLikeGetProxy(IterLike):
+class IterGet(Iter):
 
     def read_with_timeout(self, size):
         try:
@@ -295,7 +291,7 @@ class IterLikeGetProxy(IterLike):
         return data
 
 
-class IterLikeFileDescriptor(IterLike):
+class IterGetFileDescriptor(Iter):
 
     def read_with_timeout(self, size):
         try:

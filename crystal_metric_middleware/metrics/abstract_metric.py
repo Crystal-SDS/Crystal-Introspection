@@ -47,11 +47,11 @@ class AbstractMetric(object):
                                                       self.data)
 
     def _is_get_already_intercepted(self):
-        return isinstance(self.response.app_iter, IterLikeFileDescriptor) or \
-               isinstance(self.response.app_iter, IterLikeGetProxy)
+        return isinstance(self.response.app_iter, IterGetFileDescriptor) or \
+               isinstance(self.response.app_iter, IterGet)
 
     def _is_put_already_intercepted(self):
-        return isinstance(self.request.environ['wsgi.input'], IterLikePut)
+        return isinstance(self.request.environ['wsgi.input'], IterPut)
 
     def _get_applied_metrics_on_get(self):
         if hasattr(self.response.app_iter, 'metrics'):

@@ -96,7 +96,10 @@ class AbstractMetric(object):
         metrics = self._get_applied_metrics_on_get()
         metrics.append(self)
 
-        self.response.app_iter = IterGet(reader, metrics, self.read_timeout)
+        if self.current_server == 'proxy':
+            self.response.app_iter = IterGet(reader, metrics, self.read_timeout)
+        elif self.current_server == 'object':
+            self.response.app_iter = IterGetFileDescriptor(reader, metrics, self.read_timeout)
 
     def _intercept_put(self):
         reader = self._get_object_reader()
@@ -296,7 +299,7 @@ class IterGetFileDescriptor(Iter):
     def read_with_timeout(self, size):
         try:
             with Timeout(self.timeout):
-                chunk = os.read(self.obj_data, size)
+                chunk = os.read(self.obj_data.fileno(), size)
                 self._apply_metrics_on_read(chunk)
         except Timeout:
             self.close()
@@ -308,11 +311,11 @@ class IterGetFileDescriptor(Iter):
 
     def next(self, size=64 * 1024):
         if len(self.buf) < size:
-            r, _, _ = select.select([self.obj_data], [], [], self.timeout)
+            r, _, _ = select.select([self.obj_data.fileno()], [], [], self.timeout)
             if len(r) == 0:
                 self.close()
 
-            if self.obj_data in r:
+            if self.obj_data.fileno() in r:
                 self.buf += self.read_with_timeout(size - len(self.buf))
                 if self.buf == b'':
                     self.close()
@@ -332,5 +335,5 @@ class IterGetFileDescriptor(Iter):
     def close(self):
         if self.closed:
             return
-        os.close(self.obj_data)
+        os.close(self.obj_data.fileno())
         self.closed = True

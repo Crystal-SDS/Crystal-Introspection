@@ -153,7 +153,7 @@ class CrystalMetricMiddleware(object):
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
-            self.logger.debug('call in %s' % (self.exec_server))
+            self.logger.debug('call in %s-server.' % (self.exec_server))
         except NotCrystalMetricRequest:
             return req.get_response(self.app)
 

@@ -36,9 +36,9 @@ class CrystalMetricControl(object):
         self.status_thread.start()
 
         self.logger.info("Starting Get-Metrics Thread")
-        self.control_thread = GetMetricsThread(self.conf, self.logger)
-        self.control_thread.daemon = True
-        # self.control_thread.start()
+        self.get_metrics_thread = GetMetricsThread(self.conf, self.logger)
+        self.get_metrics_thread.daemon = True
+        # self.get_metrics_thread.start()
 
         self.logger.info("Starting Publish Thread")
         self.publish_thread = PublishThread(self.conf, self.logger)
@@ -48,7 +48,7 @@ class CrystalMetricControl(object):
         self.threads_started = False
 
     def get_metrics(self):
-        return self.control_thread.metric_list
+        return self.get_metrics_thread.get_metrics()
 
     def publish_stateful_metric(self, routing_key, data):
         self.publish_thread.publish_statefull(routing_key, data)
@@ -71,7 +71,6 @@ class PublishThread(threading.Thread):
         self.messages_to_send = Queue.Queue()
 
         self.interval = conf.get('publish_interval', 0.995)
-        # self.ip = conf.get('bind_ip')+":"+conf.get('bind_port')
         self.host_name = socket.gethostname()
         self.exchange = conf.get('exchange', 'amq.topic')
 
@@ -312,7 +311,7 @@ class GetMetricsThread(threading.Thread):
         information introduced via the dashboard.
         """
         metric_keys = self.redis.keys("workload_metric:*")
-        metric_list = dict()
+        metric_list = {}
         for key in metric_keys:
             metric = self.redis.hgetall(key)
             if self.server in metric['execution_server'] and \
@@ -329,6 +328,9 @@ class GetMetricsThread(threading.Thread):
                 self.logger.error("Unable to connect to " + self.redis_host +
                                   " for getting the workload metrics.")
             greenthread.sleep(self.interval)
+
+    def get_metrics(self):
+        return self.metric_list
 
 
 class NodeStatusThread(threading.Thread):
@@ -353,8 +355,6 @@ class NodeStatusThread(threading.Thread):
         self.redis = redis.StrictRedis(self.redis_host,
                                        self.redis_port,
                                        self.redis_db)
-
-        self.metric_list = {}
 
     def _get_swift_disk_usage(self):
         swift_devices = dict()

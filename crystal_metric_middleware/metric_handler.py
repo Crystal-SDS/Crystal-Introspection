@@ -1,6 +1,5 @@
 from metrics.metric_control import CrystalMetricControl
 from swift.common.swob import HTTPInternalServerError
-from swift.common.swob import HTTPException
 from swift.common.swob import wsgify
 from swift.common.utils import get_logger
 from eventlet import greenthread
@@ -51,6 +50,12 @@ class CrystalMetricHandler(object):
         self.method = self.request.method
         self.response = None
         self.crystal_control = crystal_control
+
+        if not self.is_crystal_metric_request:
+            raise NotCrystalMetricRequest()
+
+    def is_crystal_metric_request(self):
+        return self.request.method in ('PUT', 'GET')
 
     def _extract_vaco(self):
         """
@@ -114,8 +119,6 @@ class CrystalMetricHandler(object):
                                      str(metric_list))
 
                 return self.response
-            else:
-                raise NotCrystalMetricRequest()
 
 
 class CrystalMetricMiddleware(object):
@@ -144,11 +147,9 @@ class CrystalMetricMiddleware(object):
 
         try:
             return request_handler.handle_request()
-        except HTTPException:
-            self.logger.exception('Middleware execution failed')
-            raise
-        except Exception:
-            self.logger.exception('Middleware execution failed')
+
+        except Exception as e:
+            self.logger.exception('Middleware execution failed: '+str(e))
             raise HTTPInternalServerError(body='Crystal Metric middleware execution failed')
 
     def _start_control_threads(self):
@@ -156,7 +157,7 @@ class CrystalMetricMiddleware(object):
             try:
                 self.logger.info("Starting threads.")
                 self.crystal_control.publish_thread.start()
-                self.crystal_control.control_thread.start()
+                self.crystal_control.get_metrics_thread.start()
                 self.crystal_control.threads_started = True
                 greenthread.sleep(0.1)
             except:

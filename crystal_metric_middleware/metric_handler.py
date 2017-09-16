@@ -7,6 +7,10 @@ from eventlet import greenthread
 import sys
 import os
 
+# Add source directories to sys path
+workload_metrics_path = os.path.join('/opt', 'crystal', 'workload_metrics')
+sys.path.insert(0, workload_metrics_path)
+
 
 class NotCrystalMetricRequest(Exception):
     pass
@@ -48,12 +52,6 @@ class CrystalMetricHandler(object):
         self.response = None
         self.crystal_control = crystal_control
 
-        # Add source directories to sys path
-        workload_metrics = os.path.join('/opt', 'crystal', 'workload_metrics')
-        sys.path.insert(0, workload_metrics)
-
-        self._start_control_threads()
-
     def _extract_vaco(self):
         """
         Set version, account, container, obj vars from self._parse_vaco result
@@ -69,17 +67,6 @@ class CrystalMetricHandler(object):
                 self.request.split_path(5, 5, rest_with_last=True)
         else:
             raise NotCrystalMetricRequest()
-
-    def _start_control_threads(self):
-        if not self.crystal_control.threads_started:
-            try:
-                self.logger.info("Starting threads.")
-                self.crystal_control.publish_thread.start()
-                self.crystal_control.control_thread.start()
-                self.crystal_control.threads_started = True
-                greenthread.sleep(0.1)
-            except:
-                self.logger.error("Error starting threads.")
 
     def _import_metric(self, metric):
         modulename = metric['metric_name'].rsplit('.', 1)[0]
@@ -128,7 +115,7 @@ class CrystalMetricHandler(object):
 
                 return self.response
             else:
-                return self.request.get_response(self.app)
+                raise NotCrystalMetricRequest()
 
 
 class CrystalMetricMiddleware(object):
@@ -141,15 +128,13 @@ class CrystalMetricMiddleware(object):
                                  log_route='crystal_metric_handler')
         self.conf = conf
         self.handler_class = CrystalMetricHandler
-        self.control_class = CrystalMetricControl
-
         ''' Singleton instance of Metric control '''
-        self.crystal_control = self.control_class(conf=self.conf,
-                                                  log=self.logger)
+        self.crystal_control = CrystalMetricControl(self.conf, self.logger)
 
     @wsgify
     def __call__(self, req):
         try:
+            self._start_control_threads()
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
@@ -165,6 +150,17 @@ class CrystalMetricMiddleware(object):
         except Exception:
             self.logger.exception('Middleware execution failed')
             raise HTTPInternalServerError(body='Crystal Metric middleware execution failed')
+
+    def _start_control_threads(self):
+        if not self.crystal_control.threads_started:
+            try:
+                self.logger.info("Starting threads.")
+                self.crystal_control.publish_thread.start()
+                self.crystal_control.control_thread.start()
+                self.crystal_control.threads_started = True
+                greenthread.sleep(0.1)
+            except:
+                self.logger.error("Error starting threads.")
 
 
 def filter_factory(global_conf, **local_conf):

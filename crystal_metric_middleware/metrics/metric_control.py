@@ -1,4 +1,4 @@
-from threading import Thread
+import threading
 from datetime import datetime, timedelta
 from eventlet import greenthread
 import Queue
@@ -12,16 +12,14 @@ import copy
 import os
 
 
-SRC_METRIC_PATH = os.path.join("/opt", "crystal", "workload_metrics")
-DST_METRIC_PATH = os.path.abspath(__file__).rsplit('/', 1)[0]+'/metrics'
-
-
 class Singleton(type):
     _instances = {}
+    __lock = threading.Lock()
 
     def __call__(cls, *args, **kwargs):  # @NoSelf
         if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+            with cls.__lock:
+                cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
 
 
@@ -32,15 +30,20 @@ class CrystalMetricControl(object):
         self.logger = log
         self.conf = conf
 
+        self.logger.info("Starting Node Status Thread")
         self.status_thread = NodeStatusThread(self.conf, self.logger)
         self.status_thread.daemon = True
         self.status_thread.start()
 
-        self.control_thread = ControlThread(self.conf, self.logger)
+        self.logger.info("Starting Get-Metrics Thread")
+        self.control_thread = GetMetricsThread(self.conf, self.logger)
         self.control_thread.daemon = True
+        # self.control_thread.start()
 
+        self.logger.info("Starting Publish Thread")
         self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
+        # self.publish_thread.start()
 
         self.threads_started = False
 
@@ -57,10 +60,10 @@ class CrystalMetricControl(object):
         self.publish_thread.force_publish_metric(routing_key, data)
 
 
-class PublishThread(Thread):
+class PublishThread(threading.Thread):
 
     def __init__(self, conf, logger):
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
 
         self.logger = logger
         self.monitoring_statefull_data = dict()
@@ -285,10 +288,10 @@ class PublishThread(Thread):
                 self.channel = self.rabbit.channel()
 
 
-class ControlThread(Thread):
+class GetMetricsThread(threading.Thread):
 
     def __init__(self, conf, logger):
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
 
         self.conf = conf
         self.logger = logger
@@ -297,12 +300,11 @@ class ControlThread(Thread):
         self.redis_host = self.conf.get('redis_host')
         self.redis_port = self.conf.get('redis_port')
         self.redis_db = self.conf.get('redis_db')
+        self.metric_list = dict()
 
         self.redis = redis.StrictRedis(self.redis_host,
                                        self.redis_port,
                                        self.redis_db)
-
-        self.metric_list = {}
 
     def _get_workload_metrics(self):
         """
@@ -329,10 +331,10 @@ class ControlThread(Thread):
             greenthread.sleep(self.interval)
 
 
-class NodeStatusThread(Thread):
+class NodeStatusThread(threading.Thread):
 
     def __init__(self, conf, logger):
-        Thread.__init__(self)
+        threading.Thread.__init__(self)
 
         self.conf = conf
         self.logger = logger

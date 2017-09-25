@@ -30,17 +30,14 @@ class CrystalMetricControl(object):
         self.logger = log
         self.conf = conf
 
-        self.logger.info("Starting Node Status Thread")
         self.status_thread = NodeStatusThread(self.conf, self.logger)
         self.status_thread.daemon = True
         self.status_thread.start()
 
-        self.logger.info("Starting Get-Metrics Thread")
         self.get_metrics_thread = GetMetricsThread(self.conf, self.logger)
         self.get_metrics_thread.daemon = True
         # self.get_metrics_thread.start()
 
-        self.logger.info("Starting Publish Thread")
         self.publish_thread = PublishThread(self.conf, self.logger)
         self.publish_thread.daemon = True
         # self.publish_thread.start()

@@ -128,9 +128,13 @@ class PublishThread(threading.Thread):
     def _generate_messages_from_stateless_data(self, date, last_date):
         stateless_data_copy = copy.deepcopy(self.monitoring_stateless_data)
 
-        if last_date == date.strftime("%Y-%m-%d %H:%M:%S"):
-            self.last_stateless_data = copy.deepcopy(stateless_data_copy)
-            return
+        if last_date:
+            last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
+            now_datetime = date.strftime("%Y-%m-%d %H:%M:%S")
+
+            if last_datetime == now_datetime:
+                self.last_stateless_data = copy.deepcopy(stateless_data_copy)
+                return
 
         for metric_name in stateless_data_copy.keys():
             for key in stateless_data_copy[metric_name].keys():
@@ -193,8 +197,12 @@ class PublishThread(threading.Thread):
 
     def _generate_messages_from_statefull_data(self, date, last_date):
 
-        if last_date == date.strftime("%Y-%m-%d %H:%M:%S"):
-            return
+        if last_date:
+            last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
+            now_datetime = date.strftime("%Y-%m-%d %H:%M:%S")
+
+            if last_datetime == now_datetime:
+                return
 
         statefull_data_copy = copy.deepcopy(self.monitoring_statefull_data)
 
@@ -268,7 +276,7 @@ class PublishThread(threading.Thread):
             date = datetime.now(pytz.timezone(time.tzname[0]))
             self._generate_messages_from_stateless_data(date, last_date)
             self._generate_messages_from_statefull_data(date, last_date)
-            last_date = date.strftime("%Y-%m-%d %H:%M:%S")
+            last_date = date
 
             try:
                 while not self.messages_to_send.empty():

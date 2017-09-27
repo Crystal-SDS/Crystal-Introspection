@@ -54,8 +54,9 @@ class CrystalMetricHandler(object):
         if not self.is_crystal_metric_request:
             raise NotCrystalMetricRequest()
 
+    @property
     def is_crystal_metric_request(self):
-        return self.request.method in ('PUT', 'GET')
+        return self.method in ('PUT', 'GET')
 
     def _extract_vaco(self):
         """
@@ -141,8 +142,9 @@ class CrystalMetricMiddleware(object):
             request_handler = self.handler_class(req, self.conf,
                                                  self.app, self.logger,
                                                  self.crystal_control)
-            self.logger.debug('call in %s-server.' % (self.exec_server))
+            self.logger.debug('Call in %s-server.' % (self.exec_server))
         except NotCrystalMetricRequest:
+            self.logger.debug('Not Metric request. Bypassing middleware')
             return req.get_response(self.app)
 
         try:

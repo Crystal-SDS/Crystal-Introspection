@@ -35,16 +35,18 @@ class AbstractMetric(object):
         Send data to publish thread
         """
         metric_name = self.metric_name
-        self.data['value'] = value
+        metric = {}
+        metric.update(self.data)
+        metric['value'] = value
         if self.type == 'stateful':
             self.crystal_control.publish_stateful_metric(metric_name,
-                                                         self.data)
+                                                         metric)
         elif self.type == 'stateless':
             self.crystal_control.publish_stateless_metric(metric_name,
-                                                          self.data)
+                                                          metric)
         elif self.type == 'force':
             self.crystal_control.force_publish_metric(metric_name,
-                                                      self.data)
+                                                      metric)
 
     def _is_get_already_intercepted(self):
         return isinstance(self.response.app_iter, IterGetFileDescriptor) or \

@@ -1,6 +1,7 @@
 import threading
 from datetime import datetime, timedelta
 from eventlet import greenthread
+from threading import Thread
 import Queue
 import socket
 import time
@@ -81,37 +82,59 @@ class PublishThread(threading.Thread):
                                                     port=rabbit_port,
                                                     credentials=credentials)
 
+        self.statefull_data = Queue.Queue()
+        self.stateless_data = Queue.Queue()
+
+        self.statefull_agregator = Thread(target=self._aggregate_statefull_data)
+        self.statefull_agregator.setDaemon(True)
+        self.statefull_agregator.start()
+
+        self.stateless_agregator = Thread(target=self._aggregate_stateless_data)
+        self.stateless_agregator.setDaemon(True)
+        self.stateless_agregator.start()
+
+    def _aggregate_statefull_data(self):
+        while True:
+            try:
+                (metric_name, data) = self.statefull_data.get()
+
+                if metric_name not in self.monitoring_statefull_data:
+                    self.monitoring_statefull_data[metric_name] = dict()
+
+                value = data['value']
+                del data['value']
+                key = str(data)
+
+                if key not in self.monitoring_statefull_data[metric_name]:
+                    self.monitoring_statefull_data[metric_name][key] = 0
+
+                self.monitoring_statefull_data[metric_name][key] += value
+            except Exception as e:
+                print e.message
+
+    def _aggregate_stateless_data(self):
+        while True:
+            try:
+                (metric_name, data) = self.stateless_data.get()
+                if metric_name not in self.monitoring_stateless_data:
+                    self.monitoring_stateless_data[metric_name] = dict()
+
+                value = data['value']
+                del data['value']
+                key = str(data)
+
+                if key not in self.monitoring_stateless_data[metric_name]:
+                    self.monitoring_stateless_data[metric_name][key] = 0
+
+                self.monitoring_stateless_data[metric_name][key] += value
+            except Exception as e:
+                print e.message
+
     def publish_statefull(self, metric_name, data):
-        if metric_name not in self.monitoring_statefull_data:
-            self.monitoring_statefull_data[metric_name] = dict()
-
-        value = data['value']
-        del data['value']
-        key = str(data)
-
-        if key not in self.monitoring_statefull_data[metric_name]:
-            self.monitoring_statefull_data[metric_name][key] = 0
-
-        try:
-            self.monitoring_statefull_data[metric_name][key] += value
-        except Exception as e:
-            print e
+        self.statefull_data.put((metric_name, data))
 
     def publish_stateless(self, metric_name, data):
-        if metric_name not in self.monitoring_stateless_data:
-            self.monitoring_stateless_data[metric_name] = dict()
-
-        value = data['value']
-        del data['value']
-        key = str(data)
-
-        if key not in self.monitoring_stateless_data[metric_name]:
-            self.monitoring_stateless_data[metric_name][key] = 0
-
-        try:
-            self.monitoring_stateless_data[metric_name][key] += value
-        except Exception as e:
-            print e
+        self.stateless_data.put((metric_name, data))
 
     def force_publish_metric(self, metric_name, data):
         date = datetime.now(pytz.timezone(time.tzname[0]))
@@ -169,7 +192,7 @@ class PublishThread(threading.Thread):
 
                 if value == 0.0:
                     self.zero_value_timeout[metric_name][key] += 1
-                    if self.zero_value_timeout[metric_name][key] == 5:
+                    if self.zero_value_timeout[metric_name][key] == 10:
                         del self.monitoring_stateless_data[metric_name][key]
                         if len(self.monitoring_stateless_data[metric_name]) == 0:
                             del self.monitoring_stateless_data[metric_name]
@@ -236,7 +259,7 @@ class PublishThread(threading.Thread):
 
                 if value == 0:
                     self.zero_value_timeout[metric_name][key] += 1
-                    if self.zero_value_timeout[metric_name][key] == 5:
+                    if self.zero_value_timeout[metric_name][key] == 10:
                         del self.monitoring_statefull_data[metric_name][key]
                         if len(self.monitoring_statefull_data[metric_name]) == 0:
                             del self.monitoring_statefull_data[metric_name]

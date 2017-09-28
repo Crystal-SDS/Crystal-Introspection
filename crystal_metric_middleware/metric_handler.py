@@ -80,7 +80,8 @@ class CrystalMetricHandler(object):
         m = __import__(modulename, globals(), locals(), [classname])
         m_class = getattr(m, classname)
         metric_class = m_class(self.logger, self.crystal_control, modulename,
-                               self.exec_server, self.request, self.response)
+                               self._account, self.exec_server, self.request,
+                               self.response)
         return metric_class
 
     def handle_request(self):

@@ -10,8 +10,8 @@ class AbstractMetric(object):
 
     type = 'stateless'
 
-    def __init__(self, logger, crystal_control, metric_name, server,
-                 request, response):
+    def __init__(self, logger, crystal_control, metric_name, project_id,
+                 server, request, response):
         self.logger = logger
         self.request = request
         self.response = response
@@ -24,8 +24,11 @@ class AbstractMetric(object):
         self._parse_vaco()
 
         self.project_name = str(self.request.headers['X-Project-Name'])
+        self.project_id = project_id.split('_')[1]
         self.data = dict()
+        self.data['storage_policy'] = self._get_storage_policy_id()
         self.data['project'] = self.project_name
+        self.data['project_id'] = self.project_id
         self.data['container'] = os.path.join(self.project_name, self.container)
         self.data['method'] = self.method
         self.data['server_type'] = self.current_server
@@ -47,6 +50,20 @@ class AbstractMetric(object):
         elif self.type == 'force':
             self.crystal_control.force_publish_metric(metric_name,
                                                       metric)
+
+    def _get_storage_policy_id(self):
+        """
+        This method returns the current storage policy ID
+        """
+        if self.current_server == "proxy":
+            project = self.request.environ['PATH_INFO'].split('/')[2]
+            container = self.request.environ['PATH_INFO'].split('/')[3]
+            info = self.request.environ['swift.infocache']
+            storage_policy = info['container/'+project+'/'+container]['storage_policy']
+        else:
+            storage_policy = self.request.environ['HTTP_X_BACKEND_STORAGE_POLICY_INDEX']
+
+        return storage_policy
 
     def _is_get_already_intercepted(self):
         return isinstance(self.response.app_iter, IterGetFileDescriptor) or \

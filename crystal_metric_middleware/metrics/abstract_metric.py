@@ -55,13 +55,13 @@ class AbstractMetric(object):
         """
         This method returns the current storage policy ID
         """
-        if self.current_server == "proxy":
+        if 'HTTP_X_BACKEND_STORAGE_POLICY_INDEX' in self.request.environ:
+            storage_policy = self.request.environ['HTTP_X_BACKEND_STORAGE_POLICY_INDEX']
+        else:
             project = self.request.environ['PATH_INFO'].split('/')[2]
             container = self.request.environ['PATH_INFO'].split('/')[3]
             info = self.request.environ['swift.infocache']
-            storage_policy = info['container/'+project+'/'+container]['storage_policy']
-        else:
-            storage_policy = self.request.environ['HTTP_X_BACKEND_STORAGE_POLICY_INDEX']
+            storage_policy = info['container/' + project + '/' + container]['storage_policy']
 
         return storage_policy
 

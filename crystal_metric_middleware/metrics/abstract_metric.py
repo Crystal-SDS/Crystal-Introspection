@@ -60,8 +60,11 @@ class AbstractMetric(object):
         else:
             project = self.request.environ['PATH_INFO'].split('/')[2]
             container = self.request.environ['PATH_INFO'].split('/')[3]
-            info = self.request.environ['swift.infocache']
-            storage_policy = info['container/' + project + '/' + container]['storage_policy']
+            try:
+                info = self.request.environ['swift.infocache']
+                storage_policy = info['container/' + project + '/' + container]['storage_policy']
+            except KeyError:
+                storage_policy = 'Unknown'
 
         return storage_policy
 

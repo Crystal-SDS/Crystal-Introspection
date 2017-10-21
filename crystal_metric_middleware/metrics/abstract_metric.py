@@ -1,7 +1,10 @@
-import select
-import os
+from datetime import datetime
 from eventlet import Timeout
 from swift.common.request_helpers import SegmentedIterable
+import select
+import os
+import pytz
+import time
 
 CHUNK_SIZE = 64 * 1024
 
@@ -10,12 +13,17 @@ class AbstractMetric(object):
 
     type = 'stateless'
 
-    def __init__(self, logger, crystal_control, metric_name, project_id,
+    def __init__(self, logger, stateless_metrics_queue, statefull_metrics_queue,
+                 instant_metrics_queue, metric_name, project_id,
                  server, request, response):
         self.logger = logger
         self.request = request
         self.response = response
-        self.crystal_control = crystal_control
+
+        self.stateless_metrics = stateless_metrics_queue
+        self.statefull_metrics = statefull_metrics_queue
+        self.instant_metrics = instant_metrics_queue
+
         self.metric_name = metric_name
         self.current_server = server
         self.method = self.request.method
@@ -42,14 +50,12 @@ class AbstractMetric(object):
         metric.update(self.data)
         metric['value'] = value
         if self.type == 'stateful':
-            self.crystal_control.publish_stateful_metric(metric_name,
-                                                         metric)
+            self.statefull_metrics.put_nowait((metric_name, metric))
         elif self.type == 'stateless':
-            self.crystal_control.publish_stateless_metric(metric_name,
-                                                          metric)
+            self.stateless_metrics.put_nowait((metric_name, metric))
         elif self.type == 'force':
-            self.crystal_control.force_publish_metric(metric_name,
-                                                      metric)
+            date = datetime.now(pytz.timezone(time.tzname[0]))
+            self.instant_metrics.put_nowait((metric_name, date, metric))
 
     def _get_storage_policy_id(self):
         """

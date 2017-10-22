@@ -1,21 +1,20 @@
+from metrics.get_metrics import GetMetricsThread
 from node_status import NodeStatusThread
+from datetime import datetime, timedelta
+from multiprocessing import Queue
 from swift.common.swob import wsgify
 from swift.common.utils import get_logger
 from eventlet import greenthread
+import Queue as pQueue
 import threading
-import sys
-import os
-from datetime import datetime, timedelta
-from threading import Thread
 import socket
 import time
 import pytz
 import pika
-import redis
 import json
 import copy
-import Queue as pQueue
-from multiprocessing import Queue
+import sys
+import os
 
 
 # Add source directories to sys path
@@ -32,7 +31,6 @@ class CrystalMetricMiddleware(object):
     stateless_metrics = None
     statefull_metrics = None
     instant_metrics = None
-    metrics = None
     threadLock = threading.Lock()
 
     def __init__(self, app, conf):
@@ -53,12 +51,11 @@ class CrystalMetricMiddleware(object):
                 CrystalMetricMiddleware.stateless_metrics = Queue()
                 CrystalMetricMiddleware.statefull_metrics = Queue()
                 CrystalMetricMiddleware.instant_metrics = Queue()
-                CrystalMetricMiddleware.metrics = Queue()
-
                 self._start_publisher_thread()
-                self._start_get_metrics_thread()
                 self._start_node_status_thread()
             CrystalMetricMiddleware.threadLock.release()
+
+        self._start_get_metrics_thread()
 
     @property
     def is_crystal_metric_request(self):
@@ -94,15 +91,15 @@ class CrystalMetricMiddleware(object):
 
     def _start_get_metrics_thread(self):
         self.logger.info('Starting metrics getter thread')
-        CrystalMetricMiddleware.metrics_getter = GetMetricsThread(self.conf, self.logger)
-        CrystalMetricMiddleware.metrics_getter.daemon = True
-        CrystalMetricMiddleware.metrics_getter.start()
+        self.metrics_getter = GetMetricsThread(self.conf, self.logger)
+        self.metrics_getter.daemon = True
+        self.metrics_getter.start()
 
     def _start_node_status_thread(self):
         self.logger.info('Starting node status thread')
-        CrystalMetricMiddleware.node_status = NodeStatusThread(self.conf, self.logger)
-        CrystalMetricMiddleware.node_status.daemon = True
-        CrystalMetricMiddleware.node_status.start()
+        node_status = NodeStatusThread(self.conf, self.logger)
+        node_status.daemon = True
+        node_status.start()
 
     def _import_metric(self, metric):
         modulename = metric['metric_name'].rsplit('.', 1)[0]
@@ -127,8 +124,7 @@ class CrystalMetricMiddleware(object):
 
         self.logger.debug('%s call in %s-server.' % (self.request.method, self.exec_server))
         try:
-            metrics = CrystalMetricMiddleware.metrics.get_nowait()
-            print metrics
+            metrics = self.metrics_getter.get_metrics()
 
             if metrics and self.request.method == 'PUT':
                 for metric_key in metrics:
@@ -178,8 +174,6 @@ class PublishThread(threading.Thread):
         super(PublishThread, self).__init__()
 
         self.logger = logger
-        self.monitoring_statefull_data = dict()
-        self.monitoring_stateless_data = dict()
         self.messages_to_send = pQueue.Queue()
 
         self.interval = conf.get('publish_interval', 0.995)
@@ -196,93 +190,56 @@ class PublishThread(threading.Thread):
                                                     port=rabbit_port,
                                                     credentials=credentials)
 
-        self.statefull_agregator = Thread(target=self._aggregate_statefull_metrics)
-        self.statefull_agregator.setDaemon(True)
-        self.statefull_agregator.start()
+    def _generate_messages_from_stateless_metrics(self, date, last_date):
 
-        self.stateless_agregator = Thread(target=self._aggregate_stateless_metrics)
-        self.stateless_agregator.setDaemon(True)
-        self.stateless_agregator.start()
+        stateless_metrics = {}
 
-        self.instant_sender = Thread(target=self._send_instant_metrics)
-        self.instant_sender.setDaemon(True)
-        self.instant_sender.start()
+        while not CrystalMetricMiddleware.stateless_metrics.empty():
+            (metric_name, data) = CrystalMetricMiddleware.stateless_metrics.get_nowait()
 
-    def _aggregate_statefull_metrics(self):
-        while True:
-            try:
-                if not CrystalMetricMiddleware.statefull_metrics.empty():
-                    (metric_name, data) = CrystalMetricMiddleware.statefull_metrics.get_nowait()
-                    if metric_name not in self.monitoring_statefull_data:
-                        self.monitoring_statefull_data[metric_name] = dict()
+            if metric_name not in stateless_metrics:
+                stateless_metrics[metric_name] = dict()
 
-                    value = data['value']
-                    del data['value']
-                    key = str(data)
+            value = data['value']
+            del data['value']
+            key = str(data)
 
-                    if key not in self.monitoring_statefull_data[metric_name]:
-                        self.monitoring_statefull_data[metric_name][key] = 0
+            if key not in stateless_metrics[metric_name]:
+                stateless_metrics[metric_name][key] = 0
 
-                    self.monitoring_statefull_data[metric_name][key] += value
-                else:
-                    greenthread.sleep(0.5)
-            except Exception as e:
-                print e.message
-
-    def _aggregate_stateless_metrics(self):
-        while True:
-            try:
-                if not CrystalMetricMiddleware.stateless_metrics.empty():
-                    (metric_name, data) = CrystalMetricMiddleware.stateless_metrics.get_nowait()
-                    print (metric_name, data)
-                    if metric_name not in self.monitoring_stateless_data:
-                        self.monitoring_stateless_data[metric_name] = dict()
-
-                    value = data['value']
-                    del data['value']
-                    key = str(data)
-
-                    if key not in self.monitoring_stateless_data[metric_name]:
-                        self.monitoring_stateless_data[metric_name][key] = 0
-
-                    self.monitoring_stateless_data[metric_name][key] += value
-                else:
-                    greenthread.sleep(0.5)
-            except Exception as e:
-                greenthread.sleep(self.interval)
-                print e.message
-
-    def _send_instant_metrics(self):
-        while True:
-            try:
-                if not CrystalMetricMiddleware.instant_metrics.empty():
-                    (metric_name, date, data) = CrystalMetricMiddleware.instant_metrics.get_nowait()
-                    data['host'] = self.host_name
-                    data['metric_name'] = metric_name
-                    data['@timestamp'] = str(date.isoformat())
-
-                    routing_key = 'metric.'+data['method'].lower()+'_'+metric_name
-                    message = dict()
-                    message[routing_key] = data
-                    self.messages_to_send.put(message)
-                else:
-                    greenthread.sleep(self.interval)
-            except Exception as e:
-                print e.message
-
-    def _generate_messages_from_stateless_data(self, date, last_date):
-        stateless_data_copy = copy.deepcopy(self.monitoring_stateless_data)
+            stateless_metrics[metric_name][key] += value
 
         if last_date:
             last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
             now_datetime = date.strftime("%Y-%m-%d %H:%M:%S")
 
             if last_datetime == now_datetime:
-                self.last_stateless_data = copy.deepcopy(stateless_data_copy)
                 return
 
-        for metric_name in stateless_data_copy.keys():
-            for key in stateless_data_copy[metric_name].keys():
+        if not stateless_metrics and self.last_stateless_metrics:
+            stateless_metrics = copy.deepcopy(self.last_stateless_metrics)
+            for metric_name in stateless_metrics.keys():
+                for key in stateless_metrics[metric_name].keys():
+                    stateless_metrics[metric_name][key] = 0
+                    self.zero_value_timeout[metric_name][key] += 1
+                    if self.zero_value_timeout[metric_name][key] == 10:
+                        del stateless_metrics[metric_name][key]
+                        if len(stateless_metrics[metric_name]) == 0:
+                            del stateless_metrics[metric_name]
+                        del self.last_stateless_metrics[metric_name][key]
+                        if len(self.last_stateless_metrics[metric_name]) == 0:
+                            del self.last_stateless_metrics[metric_name]
+                        del self.zero_value_timeout[metric_name][key]
+                        if len(self.zero_value_timeout[metric_name]) == 0:
+                            del self.zero_value_timeout[metric_name]
+        else:
+            try:
+                self.zero_value_timeout[metric_name][key] = 0
+            except:
+                pass
+
+        for metric_name in stateless_metrics.keys():
+            for key in stateless_metrics[metric_name].keys():
                 # example: {"{'project': 'crystal', 'container': 'crystal/data_1', 'method': 'GET'}": 52,
                 #           "{'project': 'crystal', 'container': 'crystal/data_2', 'method': 'PUT'}": 31}
 
@@ -291,11 +248,10 @@ class PublishThread(threading.Thread):
                 if key not in self.zero_value_timeout[metric_name]:
                     self.zero_value_timeout[metric_name][key] = 0
 
-                if self.last_stateless_data and \
-                   metric_name in self.last_stateless_data and \
-                   key in self.last_stateless_data[metric_name]:
-                    value = stateless_data_copy[metric_name][key] - \
-                            self.last_stateless_data[metric_name][key]
+                if self.last_stateless_metrics and \
+                   metric_name in self.last_stateless_metrics and \
+                   key in self.last_stateless_metrics[metric_name]:
+                    value = stateless_metrics[metric_name][key]
                 else:
                     # send value = 0 for second-1 for pretty printing into Kibana
                     pre_data = eval(key)
@@ -310,22 +266,7 @@ class PublishThread(threading.Thread):
                     message[routing_key] = pre_data
                     self.messages_to_send.put(message)
 
-                    value = stateless_data_copy[metric_name][key]
-
-                if value == 0.0:
-                    self.zero_value_timeout[metric_name][key] += 1
-                    if self.zero_value_timeout[metric_name][key] == 10:
-                        del self.monitoring_stateless_data[metric_name][key]
-                        if len(self.monitoring_stateless_data[metric_name]) == 0:
-                            del self.monitoring_stateless_data[metric_name]
-                        del self.last_stateless_data[metric_name][key]
-                        if len(self.last_stateless_data[metric_name]) == 0:
-                            del self.last_stateless_data[metric_name]
-                        del self.zero_value_timeout[metric_name][key]
-                        if len(self.zero_value_timeout[metric_name]) == 0:
-                            del self.zero_value_timeout[metric_name]
-                else:
-                    self.zero_value_timeout[metric_name][key] = 0
+                    value = stateless_metrics[metric_name][key]
 
                 data = eval(key)
                 data['host'] = self.host_name
@@ -338,9 +279,23 @@ class PublishThread(threading.Thread):
                 message[routing_key] = data
                 self.messages_to_send.put(message)
 
-        self.last_stateless_data = copy.deepcopy(stateless_data_copy)
+        self.last_stateless_metrics = stateless_metrics
 
-    def _generate_messages_from_statefull_data(self, date, last_date):
+    def _generate_messages_from_statefull_metrics(self, date, last_date):
+
+        while not CrystalMetricMiddleware.statefull_metrics.empty():
+            (metric_name, data) = CrystalMetricMiddleware.statefull_metrics.get_nowait()
+            if metric_name not in self.statefull_metrics:
+                self.statefull_metrics[metric_name] = dict()
+
+            value = data['value']
+            del data['value']
+            key = str(data)
+
+            if key not in self.statefull_metrics[metric_name]:
+                self.statefull_metrics[metric_name][key] = 0
+
+            self.statefull_metrics[metric_name][key] += value
 
         if last_date:
             last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
@@ -349,20 +304,18 @@ class PublishThread(threading.Thread):
             if last_datetime == now_datetime:
                 return
 
-        statefull_data_copy = copy.deepcopy(self.monitoring_statefull_data)
-
-        for metric_name in statefull_data_copy.keys():
-            for key in statefull_data_copy[metric_name].keys():
+        for metric_name in self.statefull_metrics.keys():
+            for key in self.statefull_metrics[metric_name].keys():
 
                 if metric_name not in self.zero_value_timeout:
                     self.zero_value_timeout[metric_name] = dict()
                 if key not in self.zero_value_timeout[metric_name]:
                     self.zero_value_timeout[metric_name][key] = 0
 
-                if self.last_statefull_data and \
-                   metric_name in self.last_statefull_data and \
-                   key in self.last_statefull_data[metric_name]:
-                    value = statefull_data_copy[metric_name][key]
+                if self.last_statefull_metrics and \
+                   metric_name in self.last_statefull_metrics and \
+                   key in self.last_statefull_metrics[metric_name]:
+                    value = self.statefull_metrics[metric_name][key]
                 else:
                     # send value = 0 for second-1 for pretty printing into Kibana
                     pre_data = eval(key)
@@ -377,17 +330,17 @@ class PublishThread(threading.Thread):
                     message[routing_key] = pre_data
                     self.messages_to_send.put(message)
 
-                    value = statefull_data_copy[metric_name][key]
+                    value = self.statefull_metrics[metric_name][key]
 
                 if value == 0:
                     self.zero_value_timeout[metric_name][key] += 1
                     if self.zero_value_timeout[metric_name][key] == 10:
-                        del self.monitoring_statefull_data[metric_name][key]
-                        if len(self.monitoring_statefull_data[metric_name]) == 0:
-                            del self.monitoring_statefull_data[metric_name]
-                        del self.last_statefull_data[metric_name][key]
-                        if len(self.last_statefull_data[metric_name]) == 0:
-                            del self.last_statefull_data[metric_name]
+                        del self.statefull_metrics[metric_name][key]
+                        if len(self.statefull_metrics[metric_name]) == 0:
+                            del self.statefull_metrics[metric_name]
+                        del self.last_statefull_metrics[metric_name][key]
+                        if len(self.last_statefull_metrics[metric_name]) == 0:
+                            del self.last_statefull_metrics[metric_name]
                         del self.zero_value_timeout[metric_name][key]
                         if len(self.zero_value_timeout[metric_name]) == 0:
                             del self.zero_value_timeout[metric_name]
@@ -405,12 +358,25 @@ class PublishThread(threading.Thread):
                 message[routing_key] = data
                 self.messages_to_send.put(message)
 
-        self.last_statefull_data = copy.deepcopy(statefull_data_copy)
+        self.last_statefull_metrics = copy.deepcopy(self.statefull_metrics)
+
+    def _generate_messages_from_instant_metrics(self):
+        while not CrystalMetricMiddleware.instant_metrics.empty():
+            (metric_name, date, data) = CrystalMetricMiddleware.instant_metrics.get_nowait()
+            data['host'] = self.host_name
+            data['metric_name'] = metric_name
+            data['@timestamp'] = str(date.isoformat())
+
+            routing_key = 'metric.'+data['method'].lower()+'_'+metric_name
+            message = dict()
+            message[routing_key] = data
+            self.messages_to_send.put(message)
 
     def run(self):
         last_date = None
-        self.last_stateless_data = None
-        self.last_statefull_data = None
+        self.last_stateless_metrics = None
+        self.statefull_metrics = dict()
+        self.last_statefull_metrics = None
         self.zero_value_timeout = dict()
 
         self.rabbit = pika.BlockingConnection(self.parameters)
@@ -419,8 +385,9 @@ class PublishThread(threading.Thread):
         while True:
             greenthread.sleep(self.interval)
             date = datetime.now(pytz.timezone(time.tzname[0]))
-            self._generate_messages_from_stateless_data(date, last_date)
-            self._generate_messages_from_statefull_data(date, last_date)
+            self._generate_messages_from_stateless_metrics(date, last_date)
+            self._generate_messages_from_statefull_metrics(date, last_date)
+            self._generate_messages_from_instant_metrics()
             last_date = date
 
             try:
@@ -435,49 +402,6 @@ class PublishThread(threading.Thread):
                 self.messages_to_send.put(message)
                 self.rabbit = pika.BlockingConnection(self.parameters)
                 self.channel = self.rabbit.channel()
-
-
-class GetMetricsThread(threading.Thread):
-
-    def __init__(self, conf, logger):
-        super(GetMetricsThread, self).__init__()
-
-        self.conf = conf
-        self.logger = logger
-        self.server = self.conf.get('execution_server')
-        self.interval = self.conf.get('control_interval', 10)
-        self.redis_host = self.conf.get('redis_host')
-        self.redis_port = self.conf.get('redis_port')
-        self.redis_db = self.conf.get('redis_db')
-
-        self.redis = redis.StrictRedis(self.redis_host,
-                                       self.redis_port,
-                                       self.redis_db)
-
-    def _get_workload_metrics(self):
-        """
-        This method connects to redis to download the metrics and the
-        information introduced via the dashboard.
-        """
-        metric_keys = self.redis.keys("workload_metric:*")
-        metric_list = {}
-        for key in metric_keys:
-            metric = self.redis.hgetall(key)
-            if self.server in metric['execution_server'] and \
-               metric['enabled'] == 'True':
-                metric_list[key] = metric
-
-        return metric_list
-
-    def run(self):
-        while True:
-            try:
-                metrics = self._get_workload_metrics()
-                CrystalMetricMiddleware.metrics.put_nowait(metrics)
-            except:
-                self.logger.error("Unable to connect to " + self.redis_host +
-                                  " for getting the workload metrics.")
-            greenthread.sleep(self.interval)
 
 
 def filter_factory(global_conf, **local_conf):

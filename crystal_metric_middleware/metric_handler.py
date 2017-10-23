@@ -31,6 +31,7 @@ class CrystalMetricMiddleware(object):
     stateless_metrics = None
     statefull_metrics = None
     instant_metrics = None
+    queues_started = False
     threadLock = threading.Lock()
 
     def __init__(self, app, conf):
@@ -42,19 +43,16 @@ class CrystalMetricMiddleware(object):
         self.conf = conf
 
         # Initialize queues and start threads only once
-        if CrystalMetricMiddleware.stateless_metrics is None \
-           and CrystalMetricMiddleware.statefull_metrics is None:
+        if not CrystalMetricMiddleware.queues_started:
             CrystalMetricMiddleware.threadLock.acquire()
-            if CrystalMetricMiddleware.stateless_metrics is None \
-               and CrystalMetricMiddleware.statefull_metrics is None \
-               and CrystalMetricMiddleware.instant_metrics is None:
+            if not CrystalMetricMiddleware.queues_started:
                 CrystalMetricMiddleware.stateless_metrics = Queue()
                 CrystalMetricMiddleware.statefull_metrics = Queue()
                 CrystalMetricMiddleware.instant_metrics = Queue()
                 self._start_publisher_thread()
                 self._start_node_status_thread()
+                CrystalMetricMiddleware.queues_started = True
             CrystalMetricMiddleware.threadLock.release()
-
         self._start_get_metrics_thread()
 
     @property
@@ -85,7 +83,8 @@ class CrystalMetricMiddleware(object):
 
     def _start_publisher_thread(self):
         self.logger.info('Starting publisher thread')
-        CrystalMetricMiddleware.metric_publisher = PublishThread(self.conf, self.logger)
+        CrystalMetricMiddleware.metric_publisher = PublishThread(self.conf,
+                                                                 self.logger)
         CrystalMetricMiddleware.metric_publisher.daemon = True
         CrystalMetricMiddleware.metric_publisher.start()
 
@@ -122,7 +121,8 @@ class CrystalMetricMiddleware(object):
         if not self.is_crystal_metric_request:
             return self.request.get_response(self.app)
 
-        self.logger.debug('%s call in %s-server.' % (self.request.method, self.exec_server))
+        self.logger.debug('%s call in %s-server.' % (self.request.method,
+                                                     self.exec_server))
         try:
             metrics = self.metrics_getter.get_metrics()
 
@@ -164,7 +164,8 @@ class CrystalMetricMiddleware(object):
                 self.logger.info('No metrics to execute')
                 return req.get_response(self.app)
         except:
-            self.logger.debug('%s call in %s-server: Bypassing middleware' % (req.method, self.exec_server))
+            self.logger.debug('%s call in %s-server: Bypassing middleware' %
+                              (req.method, self.exec_server))
             return self.request.get_response(self.app)
 
 
@@ -240,9 +241,6 @@ class PublishThread(threading.Thread):
 
         for metric_name in stateless_metrics.keys():
             for key in stateless_metrics[metric_name].keys():
-                # example: {"{'project': 'crystal', 'container': 'crystal/data_1', 'method': 'GET'}": 52,
-                #           "{'project': 'crystal', 'container': 'crystal/data_2', 'method': 'PUT'}": 31}
-
                 if metric_name not in self.zero_value_timeout:
                     self.zero_value_timeout[metric_name] = dict()
                 if key not in self.zero_value_timeout[metric_name]:
@@ -253,7 +251,7 @@ class PublishThread(threading.Thread):
                    key in self.last_stateless_metrics[metric_name]:
                     value = stateless_metrics[metric_name][key]
                 else:
-                    # send value = 0 for second-1 for pretty printing into Kibana
+                    # send value = 0 for second-1
                     pre_data = eval(key)
                     pre_data['host'] = self.host_name
                     pre_data['metric_name'] = metric_name
@@ -317,7 +315,7 @@ class PublishThread(threading.Thread):
                    key in self.last_statefull_metrics[metric_name]:
                     value = self.statefull_metrics[metric_name][key]
                 else:
-                    # send value = 0 for second-1 for pretty printing into Kibana
+                    # send value = 0 for second-1
                     pre_data = eval(key)
                     pre_data['host'] = self.host_name
                     pre_data['metric_name'] = metric_name

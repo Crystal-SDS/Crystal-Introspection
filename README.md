@@ -132,7 +132,7 @@ from crystal_metric_middleware.metrics.abstract_metric import AbstractMetric
 # The metric class inherits from AbstractMetric
 class OperationsPerSecond(AbstractMetric):
 
-	self.type = 'stateless'
+	type = 'stateless'
 	
 	on_start(self):
 		self.register_metric(1)
@@ -143,7 +143,7 @@ The code below is an example of a bandwidth metric that counts the number of MBy
 ```python
 class Bandwidth(AbstractMetric):
 
-    self.type = 'stateless'
+    type = 'stateless'
     
     def on_read(self, chunk):
         mbytes = (len(chunk)/1024.0)/1024
@@ -155,8 +155,8 @@ The next example shows a metric that counts active requests: whenever a request 
 ```python
 class ActiveRequests(AbstractMetric):
 
- 	self.type = 'stateful'
- 	  
+    type = 'statefull'
+    
     def on_start(self):
     	# Incrementing the metric
     	self.register_metric(+1)

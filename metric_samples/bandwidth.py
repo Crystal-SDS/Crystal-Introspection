@@ -9,17 +9,15 @@ class Bandwidth(AbstractMetric):
     def on_start(self):
         self.mbytes = 0
         self.sender = eventlet.spawn(self.send_metric)
+        self.last_date = None
 
     def on_read(self, chunk):
         self.mbytes += (len(chunk)/1024.0)/1024
 
-    def on_finish(self):
-        eventlet.kill(self.sender)
-        if self.mbytes != 0:
-            self.register_metric(self.mbytes)
-
     def send_metric(self):
         while True:
-            eventlet.sleep(1)
+            eventlet.sleep(0.1)
+            if self.mbytes == 0:
+                break
             self.register_metric(self.mbytes)
             self.mbytes = 0

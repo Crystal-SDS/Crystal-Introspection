@@ -33,29 +33,26 @@ class AbstractMetric(object):
 
         self.project_name = str(self.request.headers['X-Project-Name'])
         self.project_id = project_id.split('_')[1]
-        self.data = dict()
-        self.data['storage_policy'] = self._get_storage_policy_id()
+        self.data = {}
+        # self.data['storage_policy'] = self._get_storage_policy_id()
         self.data['project'] = self.project_name
         self.data['project_id'] = self.project_id
         self.data['container'] = os.path.join(self.project_name, self.container)
         self.data['method'] = self.method
         self.data['server_type'] = self.current_server
+        self.data['name'] = self.metric_name
 
     def register_metric(self, value):
         """
         Send data to publish thread
         """
-        metric_name = self.metric_name
-        metric = {}
-        metric.update(self.data)
-        metric['value'] = value
         if self.type == 'stateful':
-            self.statefull_metrics.put_nowait((metric_name, metric))
+            self.statefull_metrics.put((self.data, value))
         elif self.type == 'stateless':
-            self.stateless_metrics.put_nowait((metric_name, metric))
+            self.stateless_metrics.put((self.data, value))
         elif self.type == 'force':
             date = datetime.now(pytz.timezone(time.tzname[0]))
-            self.instant_metrics.put_nowait((metric_name, date, metric))
+            self.instant_metrics.put((self.data, date, value))
 
     def _get_storage_policy_id(self):
         """
@@ -70,6 +67,8 @@ class AbstractMetric(object):
                 info = self.request.environ['swift.infocache']
                 storage_policy = info['container/' + project + '/' + container]['storage_policy']
             except KeyError:
+                f = open("/tmp/error.metric", "w")
+                f.write(str(self.request.environ)+"\n\n")
                 storage_policy = 'Unknown'
 
         return storage_policy

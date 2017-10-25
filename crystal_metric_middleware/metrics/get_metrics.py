@@ -31,7 +31,7 @@ class GetMetricsThread(threading.Thread):
         for key in metric_keys:
             metric = self.redis.hgetall(key)
             if self.server in metric['execution_server'] and \
-               metric['enabled'] == 'True':
+               metric['status'] == 'Running':
                 metric_list[key] = metric
 
         return metric_list

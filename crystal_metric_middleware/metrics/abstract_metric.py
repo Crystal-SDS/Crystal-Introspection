@@ -1,7 +1,10 @@
-import select
-import os
+from datetime import datetime
 from eventlet import Timeout
 from swift.common.request_helpers import SegmentedIterable
+import select
+import os
+import pytz
+import time
 
 CHUNK_SIZE = 64 * 1024
 
@@ -10,12 +13,17 @@ class AbstractMetric(object):
 
     type = 'stateless'
 
-    def __init__(self, logger, crystal_control, metric_name, project_id,
+    def __init__(self, logger, stateless_metrics_queue, statefull_metrics_queue,
+                 instant_metrics_queue, metric_name, project_id,
                  server, request, response):
         self.logger = logger
         self.request = request
         self.response = response
-        self.crystal_control = crystal_control
+
+        self.stateless_metrics = stateless_metrics_queue
+        self.statefull_metrics = statefull_metrics_queue
+        self.instant_metrics = instant_metrics_queue
+
         self.metric_name = metric_name
         self.current_server = server
         self.method = self.request.method
@@ -25,31 +33,26 @@ class AbstractMetric(object):
 
         self.project_name = str(self.request.headers['X-Project-Name'])
         self.project_id = project_id.split('_')[1]
-        self.data = dict()
-        self.data['storage_policy'] = self._get_storage_policy_id()
+        self.data = {}
+        # self.data['storage_policy'] = self._get_storage_policy_id()
         self.data['project'] = self.project_name
         self.data['project_id'] = self.project_id
         self.data['container'] = os.path.join(self.project_name, self.container)
         self.data['method'] = self.method
         self.data['server_type'] = self.current_server
+        self.data['metric_name'] = self.metric_name
 
     def register_metric(self, value):
         """
         Send data to publish thread
         """
-        metric_name = self.metric_name
-        metric = {}
-        metric.update(self.data)
-        metric['value'] = value
         if self.type == 'stateful':
-            self.crystal_control.publish_stateful_metric(metric_name,
-                                                         metric)
+            self.statefull_metrics.put((self.data, value))
         elif self.type == 'stateless':
-            self.crystal_control.publish_stateless_metric(metric_name,
-                                                          metric)
+            self.stateless_metrics.put((self.data, value))
         elif self.type == 'force':
-            self.crystal_control.force_publish_metric(metric_name,
-                                                      metric)
+            date = datetime.now(pytz.timezone(time.tzname[0]))
+            self.instant_metrics.put((self.data, date, value))
 
     def _get_storage_policy_id(self):
         """
@@ -64,6 +67,8 @@ class AbstractMetric(object):
                 info = self.request.environ['swift.infocache']
                 storage_policy = info['container/' + project + '/' + container]['storage_policy']
             except KeyError:
+                f = open("/tmp/error.metric", "w")
+                f.write(str(self.request.environ)+"\n\n")
                 storage_policy = 'Unknown'
 
         return storage_policy

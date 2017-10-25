@@ -1,10 +1,20 @@
-from metrics.metric_control import CrystalMetricControl
-from swift.common.swob import HTTPInternalServerError
+from metrics.get_metrics import GetMetricsThread
+from node_status import NodeStatusThread
+from datetime import datetime, timedelta
 from swift.common.swob import wsgify
 from swift.common.utils import get_logger
 from eventlet import greenthread
+import Queue as Queue
+import threading
+import socket
+import time
+import pytz
+import pika
+import json
+import copy
 import sys
 import os
+
 
 # Add source directories to sys path
 workload_metrics_path = os.path.join('/opt', 'crystal', 'workload_metrics')
@@ -15,48 +25,38 @@ class NotCrystalMetricRequest(Exception):
     pass
 
 
-def _request_instance_property():
-    """
-    Set and retrieve the request instance.
-    This works to force to tie the consistency between the request path and
-    self.vars (i.e. api_version, account, container, obj) even if unexpectedly
-    (separately) assigned.
-    """
+class CrystalMetricMiddleware(object):
 
-    def getter(self):
-        return self._request
+    node_status = None
+    threadLock = threading.Lock()
 
-    def setter(self, request):
-        self._request = request
-        try:
-            self._extract_vaco()
-        except ValueError:
-            raise NotCrystalMetricRequest()
-
-    return property(getter, setter,
-                    doc="Force to tie the request to acc/con/obj vars")
-
-
-class CrystalMetricHandler(object):
-
-    request = _request_instance_property()
-
-    def __init__(self, request, conf, app, logger, crystal_control):
-        self.exec_server = conf.get('execution_server')
+    def __init__(self, app, conf):
         self.app = app
-        self.logger = logger
+        self.exec_server = conf.get('execution_server')
+        self.logger = get_logger(conf, name=self.exec_server +
+                                 "-server Crystal Metrics",
+                                 log_route='crystal_metric_handler')
         self.conf = conf
-        self.request = request
-        self.method = self.request.method
-        self.response = None
-        self.crystal_control = crystal_control
 
-        if not self.is_crystal_metric_request:
-            raise NotCrystalMetricRequest()
+        # Initialize node status thread only once
+        if CrystalMetricMiddleware.node_status is None:
+            CrystalMetricMiddleware.threadLock.acquire()
+            if CrystalMetricMiddleware.node_status is None:
+                self._start_node_status_thread()
+            CrystalMetricMiddleware.threadLock.release()
+
+        self._start_publisher_thread()
+        self._start_get_metrics_thread()
 
     @property
     def is_crystal_metric_request(self):
-        return self.method in ('PUT', 'GET')
+        try:
+            valid = True
+            self._extract_vaco()
+        except:
+            valid = False
+
+        return self.request.method in ('PUT', 'GET') and valid
 
     def _extract_vaco(self):
         """
@@ -74,20 +74,51 @@ class CrystalMetricHandler(object):
         else:
             raise NotCrystalMetricRequest()
 
+    def _start_publisher_thread(self):
+        self.logger.info('Starting publisher thread')
+        self.metric_publisher = PublishThread(self.conf, self.logger)
+        self.metric_publisher.daemon = True
+        self.metric_publisher.start()
+
+    def _start_get_metrics_thread(self):
+        self.logger.info('Starting metrics getter thread')
+        self.metrics_getter = GetMetricsThread(self.conf, self.logger)
+        self.metrics_getter.daemon = True
+        self.metrics_getter.start()
+
+    def _start_node_status_thread(self):
+        self.logger.info('Starting node status thread')
+        CrystalMetricMiddleware.node_status = NodeStatusThread(self.conf, self.logger)
+        CrystalMetricMiddleware.node_status.daemon = True
+        CrystalMetricMiddleware.node_status.start()
+
     def _import_metric(self, metric):
         modulename = metric['metric_name'].rsplit('.', 1)[0]
         classname = metric['class_name']
         m = __import__(modulename, globals(), locals(), [classname])
         m_class = getattr(m, classname)
-        metric_class = m_class(self.logger, self.crystal_control, modulename,
-                               self._account, self.exec_server, self.request,
-                               self.response)
+
+        sl_metrics_q = self.metric_publisher.stateless_metrics_q
+        sf_metrics_q = self.metric_publisher.statefull_metrics_q
+        it_metrics_q = self.metric_publisher.instant_metrics_q
+
+        metric_class = m_class(self.logger, sl_metrics_q, sf_metrics_q,
+                               it_metrics_q, modulename, self._account,
+                               self.exec_server, self.request, self.response)
         return metric_class
 
-    def handle_request(self):
-            metrics = self.crystal_control.get_metrics()
+    @wsgify
+    def __call__(self, req):
+        self.request = req
+        if not self.is_crystal_metric_request:
+            return self.request.get_response(self.app)
 
-            if self.method == 'PUT':
+        self.logger.debug('%s call in %s-server.' % (self.request.method,
+                                                     self.exec_server))
+        try:
+            metrics = self.metrics_getter.get_metrics()
+
+            if metrics and self.request.method == 'PUT':
                 for metric_key in metrics:
                     metric = metrics[metric_key]
                     if metric['in_flow'] == 'True':
@@ -103,7 +134,7 @@ class CrystalMetricHandler(object):
 
                 return self.request.get_response(self.app)
 
-            elif self.method == 'GET':
+            elif metrics and self.request.method == 'GET':
                 self.response = self.request.get_response(self.app)
 
                 if self.response.is_success:
@@ -121,50 +152,245 @@ class CrystalMetricHandler(object):
                                      str(metric_list))
 
                 return self.response
+            else:
+                self.logger.info('No metrics to execute')
+                return req.get_response(self.app)
+        except:
+            self.logger.debug('%s call in %s-server: Bypassing middleware' %
+                              (req.method, self.exec_server))
+            return self.request.get_response(self.app)
 
 
-class CrystalMetricMiddleware(object):
+class PublishThread(threading.Thread):
 
-    def __init__(self, app, conf):
-        self.app = app
-        self.exec_server = conf.get('execution_server')
-        self.logger = get_logger(conf, name=self.exec_server +
-                                 "-server Crystal Metrics",
-                                 log_route='crystal_metric_handler')
-        self.conf = conf
-        self.handler_class = CrystalMetricHandler
-        ''' Singleton instance of Metric control '''
-        self.crystal_control = CrystalMetricControl(self.conf, self.logger)
+    def __init__(self, conf, logger):
+        super(PublishThread, self).__init__()
 
-    @wsgify
-    def __call__(self, req):
-        try:
-            self._start_control_threads()
-            request_handler = self.handler_class(req, self.conf,
-                                                 self.app, self.logger,
-                                                 self.crystal_control)
-            self.logger.debug('%s call in %s-server.' % (req.method, self.exec_server))
-        except NotCrystalMetricRequest:
-            self.logger.debug('%s call in %s-server: Bypassing middleware' % (req.method, self.exec_server))
-            return req.get_response(self.app)
+        self.logger = logger
+        self.messages_to_send = Queue.Queue()
 
-        try:
-            return request_handler.handle_request()
+        self.stateless_metrics_q = Queue.Queue()
+        self.statefull_metrics_q = Queue.Queue()
+        self.instant_metrics_q = Queue.Queue()
 
-        except Exception as e:
-            self.logger.exception('Middleware execution failed: '+str(e))
-            raise HTTPInternalServerError(body='Crystal Metric middleware execution failed')
+        self.interval = conf.get('publish_interval', 0.990)
+        self.host_name = socket.gethostname()
+        self.exchange = conf.get('exchange', 'amq.topic')
 
-    def _start_control_threads(self):
-        if not self.crystal_control.threads_started:
+        rabbit_host = conf.get('rabbit_host')
+        rabbit_port = int(conf.get('rabbit_port'))
+        rabbit_user = conf.get('rabbit_username')
+        rabbit_pass = conf.get('rabbit_password')
+
+        credentials = pika.PlainCredentials(rabbit_user, rabbit_pass)
+        self.parameters = pika.ConnectionParameters(host=rabbit_host,
+                                                    port=rabbit_port,
+                                                    credentials=credentials)
+
+    def _generate_messages_from_stateless_metrics(self, date, last_date):
+
+        stateless_metrics = {}
+
+        while not self.stateless_metrics_q.empty():
+            (metric_data, value) = self.stateless_metrics_q.get_nowait()
+
+            metric_name = metric_data['metric_name']
+            key = str(metric_data)
+
+            if metric_name not in stateless_metrics:
+                stateless_metrics[metric_name] = dict()
+
+            if key not in stateless_metrics[metric_name]:
+                stateless_metrics[metric_name][key] = 0
+
+            stateless_metrics[metric_name][key] += value
+
+        if last_date:
+            last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
+            now_datetime = date.strftime("%Y-%m-%d %H:%M:%S")
+
+            if last_datetime == now_datetime:
+                return
+
+        if self.last_stateless_metrics:
+            for metric_name in self.last_stateless_metrics.keys():
+                for key in self.last_stateless_metrics[metric_name].keys():
+                    if metric_name not in stateless_metrics:
+                        stateless_metrics[metric_name] = {}
+                    if key not in stateless_metrics[metric_name]:
+                        stateless_metrics[metric_name][key] = 0
+                        self.zero_value_timeout[metric_name][key] += 1
+
+                        if self.zero_value_timeout[metric_name][key] == 10:
+                            del stateless_metrics[metric_name][key]
+                            if len(stateless_metrics[metric_name]) == 0:
+                                del stateless_metrics[metric_name]
+                            del self.last_stateless_metrics[metric_name][key]
+                            if len(self.last_stateless_metrics[metric_name]) == 0:
+                                del self.last_stateless_metrics[metric_name]
+                            del self.zero_value_timeout[metric_name][key]
+                            if len(self.zero_value_timeout[metric_name]) == 0:
+                                del self.zero_value_timeout[metric_name]
+                    else:
+                        self.zero_value_timeout[metric_name][key] = 0
+
+        for metric_name in stateless_metrics.keys():
+            for key in stateless_metrics[metric_name].keys():
+                if metric_name not in self.zero_value_timeout:
+                    self.zero_value_timeout[metric_name] = dict()
+                if key not in self.zero_value_timeout[metric_name]:
+                    self.zero_value_timeout[metric_name][key] = 0
+
+                if self.last_stateless_metrics and \
+                   metric_name in self.last_stateless_metrics and \
+                   key in self.last_stateless_metrics[metric_name]:
+                    value = stateless_metrics[metric_name][key]
+                else:
+                    # send value = 0 for second-1
+                    pre_data = eval(key)
+                    pre_data['host'] = self.host_name
+                    d = date - timedelta(seconds=1)
+                    pre_data['@timestamp'] = str(d.isoformat())
+                    pre_data['value'] = 0
+
+                    routing_key = 'metric.'+pre_data['method'].lower()+'_'+metric_name
+                    message = dict()
+                    message[routing_key] = pre_data
+                    self.messages_to_send.put(message)
+
+                    value = stateless_metrics[metric_name][key]
+
+                data = eval(key)
+                data['host'] = self.host_name
+                data['@timestamp'] = str(date.isoformat())
+                data['value'] = value
+
+                routing_key = 'metric.'+data['method'].lower()+'_'+metric_name
+                message = dict()
+                message[routing_key] = data
+                self.messages_to_send.put(message)
+
+        self.last_stateless_metrics = stateless_metrics
+
+    def _generate_messages_from_statefull_metrics(self, date, last_date):
+
+        while not self.statefull_metrics_q.empty():
+            (metric_data, value) = self.statefull_metrics_q.get_nowait()
+
+            metric_name = metric_data['metric_name']
+            key = str(metric_data)
+
+            if metric_name not in self.statefull_metrics:
+                self.statefull_metrics[metric_name] = dict()
+
+            if key not in self.statefull_metrics[metric_name]:
+                self.statefull_metrics[metric_name][key] = 0
+
+            self.statefull_metrics[metric_name][key] += value
+
+        if last_date:
+            last_datetime = last_date.strftime("%Y-%m-%d %H:%M:%S")
+            now_datetime = date.strftime("%Y-%m-%d %H:%M:%S")
+
+            if last_datetime == now_datetime:
+                return
+
+        for metric_name in self.statefull_metrics.keys():
+            for key in self.statefull_metrics[metric_name].keys():
+
+                if metric_name not in self.zero_value_timeout:
+                    self.zero_value_timeout[metric_name] = dict()
+                if key not in self.zero_value_timeout[metric_name]:
+                    self.zero_value_timeout[metric_name][key] = 0
+
+                if self.last_statefull_metrics and \
+                   metric_name in self.last_statefull_metrics and \
+                   key in self.last_statefull_metrics[metric_name]:
+                    value = self.statefull_metrics[metric_name][key]
+                else:
+                    # send value = 0 for second-1
+                    pre_data = eval(key)
+                    pre_data['host'] = self.host_name
+                    d = date - timedelta(seconds=1)
+                    pre_data['@timestamp'] = str(d.isoformat())
+                    pre_data['value'] = 0
+
+                    routing_key = 'metric.'+pre_data['method'].lower()+'_'+metric_name
+                    message = dict()
+                    message[routing_key] = pre_data
+                    self.messages_to_send.put(message)
+
+                    value = self.statefull_metrics[metric_name][key]
+
+                if value == 0:
+                    self.zero_value_timeout[metric_name][key] += 1
+                    if self.zero_value_timeout[metric_name][key] == 10:
+                        del self.statefull_metrics[metric_name][key]
+                        if len(self.statefull_metrics[metric_name]) == 0:
+                            del self.statefull_metrics[metric_name]
+                        del self.last_statefull_metrics[metric_name][key]
+                        if len(self.last_statefull_metrics[metric_name]) == 0:
+                            del self.last_statefull_metrics[metric_name]
+                        del self.zero_value_timeout[metric_name][key]
+                        if len(self.zero_value_timeout[metric_name]) == 0:
+                            del self.zero_value_timeout[metric_name]
+                else:
+                    self.zero_value_timeout[metric_name][key] = 0
+
+                data = eval(key)
+                data['host'] = self.host_name
+                data['@timestamp'] = str(date.isoformat())
+                data['value'] = value
+
+                routing_key = 'metric.'+data['method'].lower()+'_'+metric_name
+                message = dict()
+                message[routing_key] = data
+                self.messages_to_send.put(message)
+
+        self.last_statefull_metrics = copy.deepcopy(self.statefull_metrics)
+
+    def _generate_messages_from_instant_metrics(self):
+        while not self.instant_metrics_q.empty():
+            (metric_data, date, value) = self.instant_metrics_q.get_nowait()
+            metric_data['host'] = self.host_name
+            metric_data['value'] = value
+            metric_data['@timestamp'] = str(date.isoformat())
+
+            routing_key = 'metric.'+metric_data['method'].lower()+'_'+metric_data['metric_name']
+            message = dict()
+            message[routing_key] = metric_data
+            self.messages_to_send.put(message)
+
+    def run(self):
+        last_date = None
+        self.last_stateless_metrics = None
+        self.statefull_metrics = dict()
+        self.last_statefull_metrics = None
+        self.zero_value_timeout = dict()
+
+        self.rabbit = pika.BlockingConnection(self.parameters)
+        self.channel = self.rabbit.channel()
+
+        while True:
+            greenthread.sleep(self.interval)
+            date = datetime.now(pytz.timezone(time.tzname[0]))
+            self._generate_messages_from_stateless_metrics(date, last_date)
+            self._generate_messages_from_statefull_metrics(date, last_date)
+            self._generate_messages_from_instant_metrics()
+            last_date = date
+
             try:
-                self.logger.info("Starting threads.")
-                self.crystal_control.publish_thread.start()
-                self.crystal_control.get_metrics_thread.start()
-                self.crystal_control.threads_started = True
-                greenthread.sleep(0.1)
+                while not self.messages_to_send.empty():
+                    message = self.messages_to_send.get()
+                    for routing_key in message:
+                        data = message[routing_key]
+                        self.channel.basic_publish(exchange=self.exchange,
+                                                   routing_key=routing_key,
+                                                   body=json.dumps(data))
             except:
-                self.logger.error("Error starting threads.")
+                self.messages_to_send.put(message)
+                self.rabbit = pika.BlockingConnection(self.parameters)
+                self.channel = self.rabbit.channel()
 
 
 def filter_factory(global_conf, **local_conf):

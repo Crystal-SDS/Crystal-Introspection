@@ -40,7 +40,7 @@ class AbstractMetric(object):
         self.data['container'] = os.path.join(self.project_name, self.container)
         self.data['method'] = self.method
         self.data['server_type'] = self.current_server
-        self.data['name'] = self.metric_name
+        self.data['metric_name'] = self.metric_name
 
     def register_metric(self, value):
         """

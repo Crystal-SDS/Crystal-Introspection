@@ -194,7 +194,7 @@ class PublishThread(threading.Thread):
         while not self.stateless_metrics_q.empty():
             (metric_data, value) = self.stateless_metrics_q.get_nowait()
 
-            metric_name = metric_data['name']
+            metric_name = metric_data['metric_name']
             key = str(metric_data)
 
             if metric_name not in stateless_metrics:
@@ -249,7 +249,6 @@ class PublishThread(threading.Thread):
                     # send value = 0 for second-1
                     pre_data = eval(key)
                     pre_data['host'] = self.host_name
-                    pre_data['metric_name'] = metric_name
                     d = date - timedelta(seconds=1)
                     pre_data['@timestamp'] = str(d.isoformat())
                     pre_data['value'] = 0
@@ -263,7 +262,6 @@ class PublishThread(threading.Thread):
 
                 data = eval(key)
                 data['host'] = self.host_name
-                data['metric_name'] = metric_name
                 data['@timestamp'] = str(date.isoformat())
                 data['value'] = value
 
@@ -279,7 +277,7 @@ class PublishThread(threading.Thread):
         while not self.statefull_metrics_q.empty():
             (metric_data, value) = self.statefull_metrics_q.get_nowait()
 
-            metric_name = metric_data['name']
+            metric_name = metric_data['metric_name']
             key = str(metric_data)
 
             if metric_name not in self.statefull_metrics:
@@ -313,7 +311,6 @@ class PublishThread(threading.Thread):
                     # send value = 0 for second-1
                     pre_data = eval(key)
                     pre_data['host'] = self.host_name
-                    pre_data['metric_name'] = metric_name
                     d = date - timedelta(seconds=1)
                     pre_data['@timestamp'] = str(d.isoformat())
                     pre_data['value'] = 0
@@ -342,7 +339,6 @@ class PublishThread(threading.Thread):
 
                 data = eval(key)
                 data['host'] = self.host_name
-                data['metric_name'] = metric_name
                 data['@timestamp'] = str(date.isoformat())
                 data['value'] = value
 
@@ -360,7 +356,7 @@ class PublishThread(threading.Thread):
             metric_data['value'] = value
             metric_data['@timestamp'] = str(date.isoformat())
 
-            routing_key = 'metric.'+metric_data['method'].lower()+'_'+metric_data['name']
+            routing_key = 'metric.'+metric_data['method'].lower()+'_'+metric_data['metric_name']
             message = dict()
             message[routing_key] = metric_data
             self.messages_to_send.put(message)

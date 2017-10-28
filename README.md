@@ -26,18 +26,18 @@ After that, it is necessary to configure OpenStack Swift to add the middleware t
 
 Edit the `/etc/swift/proxy-server.conf` file in each Proxy Node, and perform the following changes:
 
-1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filter_handler` filter.
+1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filters` filter.
 
 ```ini
 [pipeline:main]
-pipeline = catch_errors gatekeeper healthcheck proxy-logging cache container_sync bulk ratelimit authtoken keystoneauth container-quotas account-quotas crystal_metric_handler crystal_filter_handler slo dlo proxy-logging proxy-server
+pipeline = catch_errors gatekeeper healthcheck proxy-logging cache container_sync bulk ratelimit authtoken crystal_acl keystoneauth container-quotas account-quotas crystal_metrics crystal_filters copy slo dlo proxy-logging proxy-server
 
 ```
 
 2. Add the configuration of the filter. Copy the lines below to the bottom part of the file:
 
 ```ini
-[filter:crystal_metric_handler]
+[filter:crystal_metrics]
 use = egg:swift_crystal_metric_middleware#crystal_metric_handler
 
 #Node Configuration
@@ -62,17 +62,17 @@ redis_db = 0
 
 Edit the `/etc/swift/object-server.conf` file in each Storage Node, and perform the following changes:
 
-1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filter_handler` filter.
+1. Add the Crystal Metric Middleware to the pipeline variable. This filter must be added before the `crystal_filters` filter.
 ```ini
 [pipeline:main]
-pipeline = healthcheck recon crystal_metric_handler crystal_filter_handler object-server
+pipeline = healthcheck recon crystal_metrics crystal_filters object-server
 
 ```
 
 2. Add the configuration of the filter. Copy the lines below to the bottom part of the file:
 
 ```ini
-[filter:crystal_metric_handler]
+[filter:crystal_metrics]
 use = egg:swift_crystal_metric_middleware#crystal_metric_handler
 
 #Node Configuration

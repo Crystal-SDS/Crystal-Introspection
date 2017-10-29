@@ -52,11 +52,12 @@ class CrystalMetricMiddleware(object):
     def is_crystal_metric_request(self):
         try:
             valid = True
-            self._extract_vaco()
+            if self.request.method != 'REPLICATE':
+                self._extract_vaco()
         except:
             valid = False
 
-        return self.request.method in ('PUT', 'GET') and valid
+        return self.request.method in ('PUT', 'GET', 'REPLICATE') and valid
 
     def _extract_vaco(self):
         """
@@ -103,13 +104,14 @@ class CrystalMetricMiddleware(object):
         it_metrics_q = self.metric_publisher.instant_metrics_q
 
         metric_class = m_class(self.logger, sl_metrics_q, sf_metrics_q,
-                               it_metrics_q, modulename, self._account,
-                               self.exec_server, self.request, self.response)
+                               it_metrics_q, modulename, self.exec_server,
+                               self.request, self.response)
         return metric_class
 
     @wsgify
     def __call__(self, req):
         self.request = req
+        self.response = None
         if not self.is_crystal_metric_request:
             return self.request.get_response(self.app)
 
@@ -118,10 +120,10 @@ class CrystalMetricMiddleware(object):
         try:
             metrics = self.metrics_getter.get_metrics()
 
-            if metrics and self.request.method == 'PUT':
+            if metrics and self.request.method in ('PUT', 'REPLICATE'):
                 for metric_key in metrics:
                     metric = metrics[metric_key]
-                    if metric['in_flow'] == 'True':
+                    if metric['put'] == 'True' or metric['replicate'] == 'True':
                         metric_class = self._import_metric(metric)
                         self.request = metric_class.execute()
 
@@ -129,8 +131,8 @@ class CrystalMetricMiddleware(object):
                     metric_list = list()
                     for metric in self.request.environ['wsgi.input'].metrics:
                         metric_list.append(metric.metric_name)
-                    self.logger.info('Go to execute metrics on PUT request: ' +
-                                     str(metric_list))
+                    self.logger.info('Go to execute metrics on %s request: %s',
+                                     self.request.method, str(metric_list))
 
                 return self.request.get_response(self.app)
 
@@ -140,7 +142,7 @@ class CrystalMetricMiddleware(object):
                 if self.response.is_success:
                     for metric_key in metrics:
                         metric = metrics[metric_key]
-                        if metric['out_flow'] == 'True':
+                        if metric['get'] == 'True':
                             metric_class = self._import_metric(metric)
                             self.response = metric_class.execute()
 
@@ -155,7 +157,8 @@ class CrystalMetricMiddleware(object):
             else:
                 self.logger.info('No metrics to execute')
                 return req.get_response(self.app)
-        except:
+        except Exception as e:
+            print e
             self.logger.debug('%s call in %s-server: Bypassing middleware' %
                               (req.method, self.exec_server))
             return self.request.get_response(self.app)

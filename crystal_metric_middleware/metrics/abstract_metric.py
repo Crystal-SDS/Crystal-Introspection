@@ -14,8 +14,7 @@ class AbstractMetric(object):
     type = 'stateless'
 
     def __init__(self, logger, stateless_metrics_queue, statefull_metrics_queue,
-                 instant_metrics_queue, metric_name, project_id,
-                 server, request, response):
+                 instant_metrics_queue, metric_name, server, request, response):
         self.logger = logger
         self.request = request
         self.response = response
@@ -32,7 +31,7 @@ class AbstractMetric(object):
         self._parse_vaco()
 
         self.project_name = str(self.request.headers['X-Project-Name'])
-        self.project_id = project_id.split('_')[1]
+        self.project_id = self.account_id.split('_')[1]
         self.data = {}
         # self.data['storage_policy'] = self._get_storage_policy_id()
         self.data['project'] = self.project_name
